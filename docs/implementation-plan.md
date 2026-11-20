@@ -132,11 +132,11 @@ The C ABI should expose these groups using versioned structs, fixed-width scalar
 ## Loader and install verification
 
 ### Current automated harness
-- Synthetic KIFACE original + proxy + extension module.
+- Synthetic original KIFACE and proxy for both Eeschema and PCB Editor, plus a shared extension module.
 - OS-native module loading and symbol resolution.
 - Full synthetic KIFACE virtual-method forwarding.
 - Extension initialize/window/reset/shutdown callbacks.
-- Python install/uninstall against a temporary fake KiCad plugin directory.
+- Python install/uninstall of both editor proxies against a temporary fake KiCad plugin directory, including real dynamic loads from the installed paths and byte-identical restore.
 - Deferred install waits for host exit.
 
 The harness is useful for loader mechanics only. It does not compile the production proxy against KiCad headers or prove that a real KiCad frame can be safely inspected.
@@ -175,11 +175,11 @@ The harness is useful for loader mechanics only. It does not compile the product
 2. The real-proxy CMake option is only a starting point. It does not yet discover the full KiCad build's generated headers, wxWidgets configuration, compile definitions, imported targets, runtime dependencies or exact module output layout.
 3. No build fingerprint gate exists yet.
 4. The host API currently exposes logging, GUI dispatch and lifecycle callbacks only. GAL, object model, tools, placement, docking, selection and property-provider services are not implemented.
-5. The extension directory and callbacks are currently hard-coded for Clippy; the host should become extension-neutral and discover Blocks/JLCPCB/Clippy modules by manifest.
+5. The host scans a shared extension directory but has no manifest, dependency ordering, capability negotiation or per-extension enable/disable settings yet.
 6. The frame callback reports a raw wxWindow pointer but does not identify the main editor frame, canvas, view, document or selection. It must be upgraded to an editor adapter callback after window construction.
 7. The installer has no platform privilege-elevation flow and no integration with the running IPC add-on. It must schedule after *all* host processes exit and confirm executable identity/PID to avoid PID-reuse races.
-8. Existing CI tests only the Eeschema synthetic path; PCB proxy and both real editor faces need separate coverage.
-9. The current Python deferred-helper test had a POSIX zombie-process wait bug; the helper wait now attempts to reap a child before checking process existence. Re-run the cross-platform workflow to confirm.
+8. CI now tests both synthetic editor faces and their joint install/restore workflow. Real KiCad Eeschema/PCB Editor injection and GUI behavior still need separate integration coverage.
+9. The deferred-helper zombie-process wait bug is fixed; the current CI matrix exercises the helper on Windows, macOS and Linux.
 10. No real KiCad GUI tests or app-bundle Gatekeeper tests are in CI yet.
 
 ## Delivery order
