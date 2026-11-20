@@ -81,6 +81,8 @@ add_test(NAME installed_proxy_roundtrip
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/test_installed_proxy.py"
         --proxy "$<TARGET_FILE:kua_proxy_eeschema>"
         --original "$<TARGET_FILE:kua_original_eeschema>"
+        --pcb-proxy "$<TARGET_FILE:kua_proxy_pcbnew>"
+        --pcb-original "$<TARGET_FILE:kua_original_pcbnew>"
         --extension "$<TARGET_FILE:kua_test_extension>"
         --test-host "$<TARGET_FILE:kua_proxy_test_host>"
         --suffix "${KUA_KIFACE_SUFFIX}")
