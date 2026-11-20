@@ -16,6 +16,7 @@ typedef enum KUA_EditorKind
     KUA_EDITOR_PCB = 2
 } KUA_EditorKind;
 
+/* on_editor_window_created is emitted only for the primary schematic or PCB editor frame. */
 typedef struct KUA_EditorContext
 {
     uint32_t struct_size;

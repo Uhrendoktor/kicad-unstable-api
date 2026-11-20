@@ -38,6 +38,8 @@ int main(int argc, char** argv)
     wxWindow* frame = iface->CreateKiWindow(nullptr, 123, reinterpret_cast<KIWAY*>(0x202), 9);
     require(frame == reinterpret_cast<wxWindow*>(static_cast<uintptr_t>(0x1234)),
             "CreateKiWindow result not forwarded");
+    require(iface->CreateKiWindow(nullptr, 124, reinterpret_cast<KIWAY*>(0x202), 9) == frame,
+            "secondary window creation was not forwarded");
     wxString s1{}, s2{}, s3{}, s4{}, s5{}, errors{};
     iface->SaveFileAs(s1, s2, s3, s4, s5, errors);
     require(iface->IfaceOrAddress(17) == reinterpret_cast<void*>(static_cast<uintptr_t>(0x4567)),
@@ -89,7 +91,7 @@ int main(int argc, char** argv)
     auto counter = reinterpret_cast<CounterFn>(symbol(original, "KUA_OriginalCounter"));
     require(counter != nullptr, "original module counters missing");
     for (int index = 0; index < 16; ++index)
-        require(counter(index) == 1,
+        require(counter(index) == (index == 3 ? 2 : 1),
                 "original KIFACE forwarding failed at slot " + std::to_string(index));
     std::cout << "PASS: KIFACE forwarding, original retention, extension discovery and lifecycle.\n";
     return 0;

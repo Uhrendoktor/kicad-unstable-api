@@ -40,6 +40,18 @@ constexpr uint32_t kEditorKind = KUA_EDITOR_PCB;
 constexpr uint32_t kEditorKind = KUA_EDITOR_SCHEMATIC;
 #endif
 
+bool is_primary_editor_frame(int class_id)
+{
+#if defined(KUA_SYNTHETIC_ABI)
+    // The synthetic harness models the primary editor frame with class ID 123.
+    return class_id == 123;
+#elif defined(KUA_BUILD_EDITOR_PCB)
+    return class_id == FRAME_PCB_EDITOR;
+#else
+    return class_id == FRAME_SCH;
+#endif
+}
+
 struct LoadedExtension
 {
     KUA_ModuleHandle handle{};
@@ -232,7 +244,7 @@ public:
             return nullptr;
 
         wxWindow* window = m_original->CreateKiWindow(parent, class_id, kiway, control_bits);
-        if (window)
+        if (window && is_primary_editor_frame(class_id))
         {
             KUA_EditorContext context{};
             context.struct_size = sizeof(KUA_EditorContext);

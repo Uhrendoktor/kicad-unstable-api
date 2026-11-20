@@ -8,7 +8,7 @@ This prototype replaces the editor KIFACE module at the path KiCad already loads
 - Linux: `_eeschema.original.kiface`, `_pcbnew.original.kiface`
 - macOS: `_eeschema.original.kiface`, `_pcbnew.original.kiface`
 
-The proxy module exports the same C entry point, `KIFACE_1`. It opens the preserved original module by absolute path, resolves that module's own `KIFACE_1`, calls the original getter and returns a forwarding KIFACE implementation to KIWAY. Every KIFACE virtual method is forwarded. The original module handle is kept alive for the process lifetime.
+The proxy module exports the same C entry point, `KIFACE_1`. It opens the preserved original module by absolute path, resolves that module's own `KIFACE_1`, calls the original getter and returns a forwarding KIFACE implementation to KIWAY. Every KIFACE virtual method is forwarded. The original module handle is kept alive for the process lifetime. Extension window callbacks are filtered to the primary `FRAME_SCH` or `FRAME_PCB_EDITOR`; symbol editors, viewers, choosers and dialogs are still forwarded to the original KIFACE but are not exposed as the main editor frame.
 
 The real KiCad suffix is configured in source:
 - Windows uses `CMAKE_SHARED_MODULE_SUFFIX` (normally `.dll`).
