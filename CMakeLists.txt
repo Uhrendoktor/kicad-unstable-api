@@ -1,0 +1,94 @@
+cmake_minimum_required(VERSION 3.20)
+project(kicad_unstable_api VERSION 0.1.0 LANGUAGES CXX)
+include(CTest)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+if(WIN32)
+    set(KUA_KIFACE_SUFFIX ".dll")
+else()
+    set(KUA_KIFACE_SUFFIX ".kiface")
+endif()
+
+set(KUA_MODULE_DIR "${CMAKE_BINARY_DIR}/modules")
+set(KUA_EXTENSION_DIR "${KUA_MODULE_DIR}/clippy-native/extensions")
+
+add_library(kua_original MODULE tests/native/original_kiface.cpp)
+target_include_directories(kua_original PRIVATE tests/native)
+set_target_properties(kua_original PROPERTIES
+    PREFIX "" OUTPUT_NAME "_eeschema.original" SUFFIX "${KUA_KIFACE_SUFFIX}"
+    LIBRARY_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
+
+add_library(kua_test_extension SHARED tests/native/test_extension.cpp)
+target_include_directories(kua_test_extension PRIVATE include)
+set_target_properties(kua_test_extension PROPERTIES
+    PREFIX "" OUTPUT_NAME "kua_test_extension"
+    LIBRARY_OUTPUT_DIRECTORY "${KUA_EXTENSION_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${KUA_EXTENSION_DIR}")
+
+add_library(kua_proxy MODULE src/kiface_proxy.cpp)
+target_include_directories(kua_proxy PRIVATE include tests/native)
+target_compile_definitions(kua_proxy PRIVATE KUA_SYNTHETIC_ABI KUA_EDITOR_SCHEMATIC)
+target_link_libraries(kua_proxy PRIVATE ${CMAKE_DL_LIBS})
+set_target_properties(kua_proxy PROPERTIES
+    PREFIX "" OUTPUT_NAME "_eeschema" SUFFIX "${KUA_KIFACE_SUFFIX}"
+    LIBRARY_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
+
+add_executable(kua_proxy_test_host tests/native/test_host.cpp)
+target_include_directories(kua_proxy_test_host PRIVATE tests/native)
+if(NOT WIN32)
+    target_link_libraries(kua_proxy_test_host PRIVATE ${CMAKE_DL_LIBS})
+endif()
+
+if(MSVC)
+    foreach(target kua_original kua_test_extension kua_proxy kua_proxy_test_host)
+        target_compile_options(${target} PRIVATE /W4 /permissive-)
+    endforeach()
+else()
+    foreach(target kua_original kua_test_extension kua_proxy kua_proxy_test_host)
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+    endforeach()
+endif()
+
+add_dependencies(kua_proxy kua_original kua_test_extension)
+add_test(NAME kiface_proxy_forwarding
+    COMMAND kua_proxy_test_host "$<TARGET_FILE:kua_proxy>" "$<TARGET_FILE:kua_test_extension>")
+set_tests_properties(kiface_proxy_forwarding PROPERTIES TIMEOUT 30)
+
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+add_test(NAME python_modloader_unit
+    COMMAND ${Python3_EXECUTABLE} -m unittest discover -s "${CMAKE_SOURCE_DIR}/tests" -p "test_modloader.py" -v)
+add_test(NAME installed_proxy_roundtrip
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/test_installed_proxy.py"
+        --proxy "$<TARGET_FILE:kua_proxy>"
+        --original "$<TARGET_FILE:kua_original>"
+        --extension "$<TARGET_FILE:kua_test_extension>"
+        --test-host "$<TARGET_FILE:kua_proxy_test_host>"
+        --suffix "${KUA_KIFACE_SUFFIX}")
+set_tests_properties(installed_proxy_roundtrip PROPERTIES TIMEOUT 45)
+
+option(KUA_BUILD_REAL_KICAD_PROXIES "Build real Eeschema and PCB KIFACE proxies" OFF)
+set(KUA_KICAD_INCLUDE_DIRS "" CACHE STRING "Include directories from the exact KiCad source/build")
+set(KUA_KICAD_LIBRARIES "" CACHE STRING "Libraries required by the exact KiCad build")
+if(KUA_BUILD_REAL_KICAD_PROXIES)
+    if(NOT KUA_KICAD_INCLUDE_DIRS)
+        message(FATAL_ERROR "Set KUA_KICAD_INCLUDE_DIRS to the exact KiCad source/build include directories.")
+    endif()
+    find_package(wxWidgets REQUIRED COMPONENTS base core aui)
+    include(${wxWidgets_USE_FILE})
+    foreach(editor eeschema pcbnew)
+        add_library(kua_proxy_${editor} MODULE src/kiface_proxy.cpp)
+        target_include_directories(kua_proxy_${editor} PRIVATE include ${KUA_KICAD_INCLUDE_DIRS} ${wxWidgets_INCLUDE_DIRS})
+        target_compile_definitions(kua_proxy_${editor} PRIVATE BUILD_KIWAY_DLL)
+        if(editor STREQUAL "pcbnew")
+            target_compile_definitions(kua_proxy_${editor} PRIVATE KUA_EDITOR_PCB)
+        else()
+            target_compile_definitions(kua_proxy_${editor} PRIVATE KUA_EDITOR_SCHEMATIC)
+        endif()
+        target_link_libraries(kua_proxy_${editor} PRIVATE ${KUA_KICAD_LIBRARIES} ${wxWidgets_LIBRARIES} ${CMAKE_DL_LIBS})
+        set_target_properties(kua_proxy_${editor} PROPERTIES PREFIX "" OUTPUT_NAME "_${editor}" SUFFIX "${KUA_KIFACE_SUFFIX}")
+    endforeach()
+endif()
