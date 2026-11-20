@@ -14,13 +14,6 @@ endif()
 set(KUA_MODULE_DIR "${CMAKE_BINARY_DIR}/modules")
 set(KUA_EXTENSION_DIR "${KUA_MODULE_DIR}/kicad-unstable-api/extensions")
 
-add_library(kua_original MODULE tests/native/original_kiface.cpp)
-target_include_directories(kua_original PRIVATE tests/native)
-set_target_properties(kua_original PROPERTIES
-    PREFIX "" OUTPUT_NAME "_eeschema.original" SUFFIX "${KUA_KIFACE_SUFFIX}"
-    LIBRARY_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
-
 add_library(kua_test_extension SHARED tests/native/test_extension.cpp)
 target_include_directories(kua_test_extension PRIVATE include)
 set_target_properties(kua_test_extension PROPERTIES
@@ -28,30 +21,27 @@ set_target_properties(kua_test_extension PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${KUA_EXTENSION_DIR}"
     RUNTIME_OUTPUT_DIRECTORY "${KUA_EXTENSION_DIR}")
 
-add_library(kua_original_pcbnew MODULE tests/native/original_kiface.cpp)
-target_include_directories(kua_original_pcbnew PRIVATE tests/native)
-set_target_properties(kua_original_pcbnew PROPERTIES
-    PREFIX "" OUTPUT_NAME "_pcbnew.original" SUFFIX "${KUA_KIFACE_SUFFIX}"
-    LIBRARY_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
+foreach(editor eeschema pcbnew)
+    add_library(kua_original_${editor} MODULE tests/native/original_kiface.cpp)
+    target_include_directories(kua_original_${editor} PRIVATE tests/native)
+    set_target_properties(kua_original_${editor} PROPERTIES
+        PREFIX "" OUTPUT_NAME "_${editor}.original" SUFFIX "${KUA_KIFACE_SUFFIX}"
+        LIBRARY_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
 
-add_library(kua_proxy_pcbnew MODULE src/kiface_proxy.cpp)
-target_include_directories(kua_proxy_pcbnew PRIVATE include tests/native)
-target_compile_definitions(kua_proxy_pcbnew PRIVATE KUA_SYNTHETIC_ABI KUA_BUILD_EDITOR_PCB)
-target_link_libraries(kua_proxy_pcbnew PRIVATE ${CMAKE_DL_LIBS})
-set_target_properties(kua_proxy_pcbnew PROPERTIES
-    PREFIX "" OUTPUT_NAME "_pcbnew" SUFFIX "${KUA_KIFACE_SUFFIX}"
-    LIBRARY_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
-
-add_library(kua_proxy MODULE src/kiface_proxy.cpp)
-target_include_directories(kua_proxy PRIVATE include tests/native)
-target_compile_definitions(kua_proxy PRIVATE KUA_SYNTHETIC_ABI)
-target_link_libraries(kua_proxy PRIVATE ${CMAKE_DL_LIBS})
-set_target_properties(kua_proxy PROPERTIES
-    PREFIX "" OUTPUT_NAME "_eeschema" SUFFIX "${KUA_KIFACE_SUFFIX}"
-    LIBRARY_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
+    add_library(kua_proxy_${editor} MODULE src/kiface_proxy.cpp)
+    target_include_directories(kua_proxy_${editor} PRIVATE include tests/native)
+    target_compile_definitions(kua_proxy_${editor} PRIVATE KUA_SYNTHETIC_ABI)
+    if(editor STREQUAL "pcbnew")
+        target_compile_definitions(kua_proxy_${editor} PRIVATE KUA_BUILD_EDITOR_PCB)
+    endif()
+    target_link_libraries(kua_proxy_${editor} PRIVATE ${CMAKE_DL_LIBS})
+    set_target_properties(kua_proxy_${editor} PROPERTIES
+        PREFIX "" OUTPUT_NAME "_${editor}" SUFFIX "${KUA_KIFACE_SUFFIX}"
+        LIBRARY_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
+    add_dependencies(kua_proxy_${editor} kua_original_${editor} kua_test_extension)
+endforeach()
 
 add_executable(kua_proxy_test_host tests/native/test_host.cpp)
 target_include_directories(kua_proxy_test_host PRIVATE include tests/native)
@@ -60,27 +50,37 @@ if(NOT WIN32)
 endif()
 
 if(MSVC)
-    foreach(target kua_original kua_original_pcbnew kua_test_extension kua_proxy kua_proxy_pcbnew kua_proxy_test_host)
+    foreach(target kua_original_eeschema kua_original_pcbnew kua_test_extension
+                   kua_proxy_eeschema kua_proxy_pcbnew kua_proxy_test_host)
         target_compile_options(${target} PRIVATE /W4 /permissive-)
     endforeach()
 else()
-    foreach(target kua_original kua_test_extension kua_proxy kua_proxy_test_host)
+    foreach(target kua_original_eeschema kua_original_pcbnew kua_test_extension
+                   kua_proxy_eeschema kua_proxy_pcbnew kua_proxy_test_host)
         target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
     endforeach()
 endif()
 
-add_dependencies(kua_proxy kua_original kua_test_extension)\nadd_dependencies(kua_proxy_pcbnew kua_original_pcbnew kua_test_extension)
-add_test(NAME kiface_proxy_forwarding
-    COMMAND kua_proxy_test_host "$<TARGET_FILE:kua_proxy>" "$<TARGET_FILE:kua_test_extension>")
-set_tests_properties(kiface_proxy_forwarding PROPERTIES TIMEOUT 30)\nadd_test(NAME pcb_kiface_proxy_forwarding\n    COMMAND kua_proxy_test_host "$<TARGET_FILE:kua_proxy_pcbnew>" "$<TARGET_FILE:kua_test_extension>" "2")\nset_tests_properties(pcb_kiface_proxy_forwarding PROPERTIES TIMEOUT 30)
+add_test(NAME eeschema_kiface_proxy_forwarding
+    COMMAND kua_proxy_test_host
+        "$<TARGET_FILE:kua_proxy_eeschema>"
+        "$<TARGET_FILE:kua_test_extension>" "1")
+set_tests_properties(eeschema_kiface_proxy_forwarding PROPERTIES TIMEOUT 30)
+
+add_test(NAME pcbnew_kiface_proxy_forwarding
+    COMMAND kua_proxy_test_host
+        "$<TARGET_FILE:kua_proxy_pcbnew>"
+        "$<TARGET_FILE:kua_test_extension>" "2")
+set_tests_properties(pcbnew_kiface_proxy_forwarding PROPERTIES TIMEOUT 30)
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME python_modloader_unit
-    COMMAND ${Python3_EXECUTABLE} -m unittest discover -s "${CMAKE_SOURCE_DIR}/tests" -p "test_modloader.py" -v)
+    COMMAND ${Python3_EXECUTABLE} -m unittest discover
+        -s "${CMAKE_SOURCE_DIR}/tests" -p "test_modloader.py" -v)
 add_test(NAME installed_proxy_roundtrip
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/test_installed_proxy.py"
-        --proxy "$<TARGET_FILE:kua_proxy>"
-        --original "$<TARGET_FILE:kua_original>"
+        --proxy "$<TARGET_FILE:kua_proxy_eeschema>"
+        --original "$<TARGET_FILE:kua_original_eeschema>"
         --extension "$<TARGET_FILE:kua_test_extension>"
         --test-host "$<TARGET_FILE:kua_proxy_test_host>"
         --suffix "${KUA_KIFACE_SUFFIX}")
@@ -96,15 +96,18 @@ if(KUA_BUILD_REAL_KICAD_PROXIES)
     find_package(wxWidgets REQUIRED COMPONENTS base core aui)
     include(${wxWidgets_USE_FILE})
     foreach(editor eeschema pcbnew)
-        add_library(kua_proxy_${editor} MODULE src/kiface_proxy.cpp)
-        target_include_directories(kua_proxy_${editor} PRIVATE include ${KUA_KICAD_INCLUDE_DIRS} ${wxWidgets_INCLUDE_DIRS})
-        target_compile_definitions(kua_proxy_${editor} PRIVATE BUILD_KIWAY_DLL)
+        add_library(kua_real_proxy_${editor} MODULE src/kiface_proxy.cpp)
+        target_include_directories(kua_real_proxy_${editor} PRIVATE
+            include ${KUA_KICAD_INCLUDE_DIRS} ${wxWidgets_INCLUDE_DIRS})
+        target_compile_definitions(kua_real_proxy_${editor} PRIVATE BUILD_KIWAY_DLL)
         if(editor STREQUAL "pcbnew")
-            target_compile_definitions(kua_proxy_${editor} PRIVATE KUA_BUILD_EDITOR_PCB)
+            target_compile_definitions(kua_real_proxy_${editor} PRIVATE KUA_BUILD_EDITOR_PCB)
         else()
-            target_compile_definitions(kua_proxy_${editor} PRIVATE KUA_BUILD_EDITOR_SCHEMATIC)
+            target_compile_definitions(kua_real_proxy_${editor} PRIVATE KUA_BUILD_EDITOR_SCHEMATIC)
         endif()
-        target_link_libraries(kua_proxy_${editor} PRIVATE ${KUA_KICAD_LIBRARIES} ${wxWidgets_LIBRARIES} ${CMAKE_DL_LIBS})
-        set_target_properties(kua_proxy_${editor} PROPERTIES PREFIX "" OUTPUT_NAME "_${editor}" SUFFIX "${KUA_KIFACE_SUFFIX}")
+        target_link_libraries(kua_real_proxy_${editor} PRIVATE
+            ${KUA_KICAD_LIBRARIES} ${wxWidgets_LIBRARIES} ${CMAKE_DL_LIBS})
+        set_target_properties(kua_real_proxy_${editor} PROPERTIES
+            PREFIX "" OUTPUT_NAME "_${editor}" SUFFIX "${KUA_KIFACE_SUFFIX}")
     endforeach()
 endif()
