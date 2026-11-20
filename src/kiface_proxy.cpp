@@ -94,7 +94,11 @@ KUA_HostApi make_host_api()
     KUA_HostApi host{};
     host.abi_version = KUA_EXTENSION_ABI_V1;
     host.struct_size = sizeof(KUA_HostApi);
-    host.host_build_tag = "kicad-unstable-api/kiface-proxy-prototype";
+    #if defined(KUA_KICAD_ABI_TAG)
+    host.host_build_tag = KUA_KICAD_ABI_TAG;
+#else
+    host.host_build_tag = "kicad-unstable-api/synthetic-test-build";
+#endif
     host.editor_kind = kEditorKind;
     host.log = &log_message;
     host.post_to_gui = &post_to_gui;
