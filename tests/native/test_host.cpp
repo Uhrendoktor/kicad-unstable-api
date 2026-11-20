@@ -1,4 +1,4 @@
-#include "synthetic_kiface.hpp"
+#include "synthetic_kiface.hpp"\n#include "kicad_unstable_api/extension_api.h"
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -19,7 +19,7 @@ void* symbol(Module m, const char* n) { return dlsym(m, n); }
 void require(bool condition, const std::string& message) { if (!condition) fail(message); }
 int main(int argc, char** argv)
 {
- if (argc != 3) fail("usage: test_host <proxy-module> <extension-module>");
+ if (argc != 3 && argc != 4) fail("usage: test_host <proxy-module> <extension-module> [expected-editor-kind]");\n const uint32_t expected_editor_kind = argc == 4 ? static_cast<uint32_t>(std::stoul(argv[3])) : KUA_EDITOR_SCHEMATIC;
  const std::filesystem::path proxy_path(argv[1]), extension_path(argv[2]);
  Module proxy = open_module(proxy_path); require(proxy != nullptr, "could not load proxy KIFACE module");
  auto getter = reinterpret_cast<KIFACE_GETTER_FUNC*>(symbol(proxy, "KIFACE_1"));
