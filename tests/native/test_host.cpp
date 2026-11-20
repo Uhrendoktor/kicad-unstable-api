@@ -59,8 +59,12 @@ int main(int argc, char** argv)
     Module extension = open_module(extension_path);
     require(extension != nullptr, "could not open extension for metrics");
     using MetricFn = int (*)(int);
+    using PostAfterShutdownFn = int (*)();
     auto metric = reinterpret_cast<MetricFn>(symbol(extension, "KUA_TestExtensionMetric"));
-    require(metric != nullptr, "extension metrics export missing");
+    auto post_after_shutdown = reinterpret_cast<PostAfterShutdownFn>(
+        symbol(extension, "KUA_TestPostAfterShutdown"));
+    require(metric != nullptr && post_after_shutdown != nullptr,
+            "extension test exports missing");
     if (metric(0) != 1 || metric(4) != 1 || metric(1) != 1 ||
         metric(5) != static_cast<int>(expected_editor_kind))
     {
@@ -74,6 +78,8 @@ int main(int argc, char** argv)
     require(metric(2) == 1, "extension reset callback not forwarded");
     iface->OnKifaceEnd();
     require(metric(3) == 1, "extension shutdown callback not forwarded");
+    require(post_after_shutdown() == 0 && metric(4) == 1,
+            "host accepted a GUI callback after extension shutdown");
 
     auto original_path = proxy_path.parent_path() /
         (proxy_path.stem().string() + ".original" + proxy_path.extension().string());
