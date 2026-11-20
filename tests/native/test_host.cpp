@@ -68,7 +68,7 @@ int main(int argc, char** argv)
     require(metric != nullptr && post_after_shutdown != nullptr,
             "extension test exports missing");
     if (metric(0) != 1 || metric(4) != 1 || metric(1) != 1 ||
-        metric(5) != static_cast<int>(expected_editor_kind))
+        metric(5) != static_cast<int>(expected_editor_kind) || metric(6) != 1)
     {
         fail("extension callbacks: initialize=" + std::to_string(metric(0)) +
              ", gui=" + std::to_string(metric(4)) +
