@@ -61,6 +61,7 @@ The synthetic test harness builds fake original KIFACE modules and proxies for b
 - forwarding every KIFACE virtual slot;
 - loading a third-party extension module from the extension directory;
 - extension initialize, editor-window, reset and shutdown callbacks;
-- Python install/restore of both editor proxies against a temporary fake KiCad plugin directory;\n- loading both installed proxies and restoring byte-identical originals.
+- Python install/restore of both editor proxies against a temporary fake KiCad plugin directory;
+- loading both installed proxies and restoring byte-identical originals.
 
 This does not validate compatibility with official KiCad binaries, real editor C++ objects, GAL rendering, event routing, macOS Gatekeeper, or Windows vendor signature-verification builds.
