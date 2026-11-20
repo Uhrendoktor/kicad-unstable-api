@@ -106,7 +106,9 @@ if(KUA_BUILD_REAL_KICAD_PROXIES)
     if(NOT KUA_KICAD_LIBRARIES OR NOT KUA_WX_INCLUDE_DIRS)
         message(FATAL_ERROR "Set KUA_KICAD_LIBRARIES and KUA_WX_INCLUDE_DIRS from the matching KiCad build; do not silently use system wxWidgets.")
     endif()
-    list(APPEND KUA_KICAD_INCLUDE_DIRS "${KUA_KICAD_SOURCE_DIR}/include")
+    list(APPEND KUA_KICAD_INCLUDE_DIRS
+        "${KUA_KICAD_SOURCE_DIR}/include"
+        "${KUA_KICAD_SOURCE_DIR}/libs/kimath/include")
     if(KUA_KICAD_BUILD_DIR)
         list(APPEND KUA_KICAD_INCLUDE_DIRS "${KUA_KICAD_BUILD_DIR}/include")
     endif()
