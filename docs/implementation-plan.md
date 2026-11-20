@@ -171,7 +171,7 @@ The harness is useful for loader mechanics only. It does not compile the product
 
 ## Current gaps in the prototype
 
-1. The synthetic KIFACE header is a test double, not a KiCad ABI projection. The README currently refers to a production projection path that is not in the tree; correct that before claiming real ABI coverage.
+1. The synthetic KIFACE header is a test double, not a KiCad ABI projection. A production ABI projection and generated header/vtable consistency check are not yet implemented.
 2. The real-proxy CMake option is only a starting point. It does not yet discover the full KiCad build's generated headers, wxWidgets configuration, compile definitions, imported targets, runtime dependencies or exact module output layout.
 3. No build fingerprint gate exists yet.
 4. The host API currently exposes logging, GUI dispatch and lifecycle callbacks only. GAL, object model, tools, placement, docking, selection and property-provider services are not implemented.
