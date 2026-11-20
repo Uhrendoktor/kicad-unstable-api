@@ -392,11 +392,6 @@ private:
             if (!extension.api || !extension.api->on_editor_window_created)
                 continue;
 
-            struct Notification
-            {
-                const KUA_ExtensionApi* api;
-                KUA_EditorContext context;
-            };
             // CreateKiWindow is a GUI-thread lifecycle callback. Invoke synchronously
             // so the wxWindow pointer cannot go stale while a deferred callback waits.
             extension.api->on_editor_window_created(&context);
