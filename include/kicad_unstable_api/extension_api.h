@@ -46,16 +46,16 @@ typedef struct KUA_HostApi
     void (*log)(int32_t level, const char* message);
     int32_t (*post_to_gui)(KUA_GuiCallback callback, void* user_data);
     /* Appended ABI v1 capabilities; check struct_size before reading these fields. */
-    void* (*overlay_create)(void* frame, void* canvas, void* view);
-    int32_t (*overlay_destroy)(void* overlay);
-    int32_t (*overlay_clear)(void* overlay);
-    int32_t (*overlay_set_style)(void* overlay,
+    uint64_t (*overlay_create)(void* frame, void* canvas, void* view);
+    int32_t (*overlay_destroy)(uint64_t overlay);
+    int32_t (*overlay_clear)(uint64_t overlay);
+    int32_t (*overlay_set_style)(uint64_t overlay,
                                  double stroke_r, double stroke_g, double stroke_b, double stroke_a,
                                  double fill_r, double fill_g, double fill_b, double fill_a,
                                  double line_width, int32_t stroke_enabled, int32_t fill_enabled);
-    int32_t (*overlay_line)(void* overlay, double x1, double y1, double x2, double y2);
-    int32_t (*overlay_circle)(void* overlay, double cx, double cy, double radius);
-    int32_t (*overlay_rectangle)(void* overlay, double x1, double y1, double x2, double y2);
+    int32_t (*overlay_line)(uint64_t overlay, double x1, double y1, double x2, double y2);
+    int32_t (*overlay_circle)(uint64_t overlay, double cx, double cy, double radius);
+    int32_t (*overlay_rectangle)(uint64_t overlay, double x1, double y1, double x2, double y2);
 } KUA_HostApi;
 
 typedef struct KUA_ExtensionApi
