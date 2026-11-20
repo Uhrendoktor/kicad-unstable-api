@@ -12,7 +12,7 @@ else()
 endif()
 
 set(KUA_MODULE_DIR "${CMAKE_BINARY_DIR}/modules")
-set(KUA_EXTENSION_DIR "${KUA_MODULE_DIR}/clippy-native/extensions")
+set(KUA_EXTENSION_DIR "${KUA_MODULE_DIR}/kicad-unstable-api/extensions")
 
 add_library(kua_original MODULE tests/native/original_kiface.cpp)
 target_include_directories(kua_original PRIVATE tests/native)
