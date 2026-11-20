@@ -246,6 +246,16 @@ def wait_for_process_exit(pid: int, poll_seconds: float = 0.25) -> None:
         return
 
     while True:
+        # On POSIX, a detached helper spawned by this process can become a
+        # zombie after exiting. kill(pid, 0) still succeeds for a zombie, so
+        # reap our own child before falling back to the generic PID check.
+        try:
+            waited_pid, _ = os.waitpid(pid, os.WNOHANG)
+            if waited_pid == pid:
+                return
+        except ChildProcessError:
+            pass  # Not our child; use the portable existence check below.
+
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
