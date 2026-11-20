@@ -11,10 +11,12 @@ namespace
 {
 enum Metric { Initialize, WindowCreated, Reset, Shutdown, GuiCallback, EditorKind, MetricCount };
 std::array<int, MetricCount> metrics{};
+const KUA_HostApi* host_api{};
 void callback(void*) { ++metrics[GuiCallback]; }
 int initialize(const KUA_HostApi* host)
 {
     ++metrics[Initialize];
+    host_api = host;
     if (!host || host->abi_version != KUA_EXTENSION_ABI_V1 ||
         (host->editor_kind != KUA_EDITOR_SCHEMATIC && host->editor_kind != KUA_EDITOR_PCB) ||
         !host->post_to_gui)
@@ -48,4 +50,11 @@ extern "C" KUA_EXTENSION_EXPORT int KUA_TestExtensionMetric(int index)
     if (index < 0 || index >= MetricCount)
         return -1;
     return metrics[static_cast<size_t>(index)];
+}
+
+extern "C" KUA_EXTENSION_EXPORT int KUA_TestPostAfterShutdown()
+{
+    if (!host_api || !host_api->post_to_gui)
+        return -1;
+    return host_api->post_to_gui(&callback, nullptr);
 }
