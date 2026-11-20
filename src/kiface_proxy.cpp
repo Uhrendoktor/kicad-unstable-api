@@ -10,7 +10,6 @@
 #  include <view/view.h>
 #  include <view/view_overlay.h>
 #  include <gal/color4d.h>
-#  include <math/vector2d.h>
 #endif
 
 #include <algorithm>
@@ -83,6 +82,8 @@ struct OverlayState
 };
 
 std::unordered_map<void*, std::unique_ptr<OverlayState>> g_overlays;
+struct EditorFrameState { EDA_DRAW_PANEL_GAL* canvas{}; KIGFX::VIEW* view{}; };
+std::unordered_map<void*, EditorFrameState> g_editor_frames;
 
 bool on_gui_thread()
 {
@@ -111,6 +112,7 @@ void destroy_overlays_for_frame(void* frame)
             state.canvas->Refresh(false);
         it = g_overlays.erase(it);
     }
+    g_editor_frames.erase(frame);
 }
 
 void destroy_all_overlays()
@@ -124,6 +126,7 @@ void destroy_all_overlays()
             state.canvas->Refresh(false);
     }
     g_overlays.clear();
+    g_editor_frames.clear();
 }
 #endif
 
@@ -177,6 +180,10 @@ int32_t overlay_rectangle(void*, double, double, double, double) { return -1; }
 void* overlay_create(void* frame, void* canvas, void* view)
 {
     if (!on_gui_thread() || !frame || !canvas || !view)
+        return nullptr;
+    const auto frame_it = g_editor_frames.find(frame);
+    if (frame_it == g_editor_frames.end() || frame_it->second.canvas != canvas ||
+        frame_it->second.view != view)
         return nullptr;
     auto state = std::make_unique<OverlayState>();
     state->frame = frame;
@@ -245,7 +252,7 @@ int32_t overlay_line(void* handle, double x1, double y1, double x2, double y2)
     OverlayState* state = find_overlay(handle);
     if (!state || !state->overlay)
         return -1;
-    state->overlay->Line(KIGFX::VECTOR2D(x1, y1), KIGFX::VECTOR2D(x2, y2));
+    state->overlay->Line(VECTOR2D(x1, y1), VECTOR2D(x2, y2));
     state->canvas->Refresh(false);
     return 1;
 }
@@ -257,7 +264,7 @@ int32_t overlay_circle(void* handle, double cx, double cy, double radius)
     OverlayState* state = find_overlay(handle);
     if (!state || !state->overlay)
         return -1;
-    state->overlay->Circle(KIGFX::VECTOR2D(cx, cy), radius);
+    state->overlay->Circle(VECTOR2D(cx, cy), radius);
     state->canvas->Refresh(false);
     return 1;
 }
@@ -269,7 +276,7 @@ int32_t overlay_rectangle(void* handle, double x1, double y1, double x2, double 
     OverlayState* state = find_overlay(handle);
     if (!state || !state->overlay)
         return -1;
-    state->overlay->Rectangle(KIGFX::VECTOR2D(x1, y1), KIGFX::VECTOR2D(x2, y2));
+    state->overlay->Rectangle(VECTOR2D(x1, y1), VECTOR2D(x2, y2));
     state->canvas->Refresh(false);
     return 1;
 }
@@ -445,6 +452,7 @@ public:
             auto* canvas = draw_frame->GetCanvas();
             context.canvas = canvas;
             context.view = canvas ? canvas->GetView() : nullptr;
+            g_editor_frames[window] = {canvas, static_cast<KIGFX::VIEW*>(context.view)};
 #endif
             notify_window_created(context);
         }
