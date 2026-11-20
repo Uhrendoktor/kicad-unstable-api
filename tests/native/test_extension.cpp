@@ -9,19 +9,19 @@
 #endif
 namespace
 {
-enum Metric { Initialize, WindowCreated, Reset, Shutdown, GuiCallback, MetricCount };
+enum Metric { Initialize, WindowCreated, Reset, Shutdown, GuiCallback, EditorKind, MetricCount };
 std::array<int, MetricCount> metrics{};
 void callback(void*) { ++metrics[GuiCallback]; }
 int initialize(const KUA_HostApi* host)
 {
  ++metrics[Initialize];
- if (!host || host->abi_version != KUA_EXTENSION_ABI_V1 || host->editor_kind != KUA_EDITOR_SCHEMATIC || !host->post_to_gui) return 0;
+ if (!host || host->abi_version != KUA_EXTENSION_ABI_V1 ||\n     (host->editor_kind != KUA_EDITOR_SCHEMATIC && host->editor_kind != KUA_EDITOR_PCB) ||\n     !host->post_to_gui) return 0;\n metrics[EditorKind] = static_cast<int>(host->editor_kind);
  host->post_to_gui(&callback, nullptr);
  return 1;
 }
 void on_window(const KUA_EditorContext* context)
 {
- if (context && context->editor_kind == KUA_EDITOR_SCHEMATIC && context->class_id == 123 &&
+ if (context && context->editor_kind == static_cast<uint32_t>(metrics[EditorKind]) && context->class_id == 123 &&
      context->frame == reinterpret_cast<void*>(static_cast<uintptr_t>(0x1234))) ++metrics[WindowCreated];
 }
 void on_reset(uint32_t editor_kind) { if (editor_kind == KUA_EDITOR_SCHEMATIC) ++metrics[Reset]; }
