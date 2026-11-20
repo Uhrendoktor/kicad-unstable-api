@@ -9,7 +9,7 @@
 #endif
 namespace
 {
-enum Metric { Initialize, WindowCreated, Reset, Shutdown, GuiCallback, EditorKind, MetricCount };
+enum Metric { Initialize, WindowCreated, Reset, Shutdown, GuiCallback, EditorKind, OverlayApi, MetricCount };
 std::array<int, MetricCount> metrics{};
 const KUA_HostApi* host_api{};
 void callback(void*) { ++metrics[GuiCallback]; }
@@ -19,8 +19,19 @@ int initialize(const KUA_HostApi* host)
     host_api = host;
     if (!host || host->abi_version != KUA_EXTENSION_ABI_V1 ||
         (host->editor_kind != KUA_EDITOR_SCHEMATIC && host->editor_kind != KUA_EDITOR_PCB) ||
-        !host->post_to_gui)
+        !host->post_to_gui || host->struct_size < sizeof(KUA_HostApi) ||
+        !host->overlay_create || !host->overlay_destroy || !host->overlay_clear ||
+        !host->overlay_set_style || !host->overlay_line || !host->overlay_circle ||
+        !host->overlay_rectangle)
         return 0;
+    if (host->overlay_create(nullptr, nullptr, nullptr) != nullptr ||
+        host->overlay_destroy(nullptr) != -1 || host->overlay_clear(nullptr) != -1 ||
+        host->overlay_set_style(nullptr, 0,0,0,1, 0,0,0,1, 1, 1,0) != -1 ||
+        host->overlay_line(nullptr, 0,0,1,1) != -1 ||
+        host->overlay_circle(nullptr, 0,0,1) != -1 ||
+        host->overlay_rectangle(nullptr, 0,0,1,1) != -1)
+        return 0;
+    metrics[OverlayApi] = 1;
     metrics[EditorKind] = static_cast<int>(host->editor_kind);
     host->post_to_gui(&callback, nullptr);
     return 1;
