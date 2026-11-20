@@ -65,6 +65,13 @@ The C ABI should expose these groups using versioned structs, fixed-width scalar
 - The extension host owns VIEW_OVERLAY lifetimes and calls VIEW::Remove before releasing them. MakeOverlay already adds the overlay to the view; do not add it twice.
 - Eeschema and PCB need separate layer/display-only verification.
 
+### 3a. Implemented GAL overlay slice
+- The C ABI appends opaque overlay create/destroy/clear/style/line/circle/rectangle functions; consumers check `struct_size` before accessing appended fields.
+- Geometry uses KiCad world coordinates (internal units), not pixels. Unit conversion helpers are a future capability.
+- All overlay operations are GUI-thread-only; extensions marshal calls through `post_to_gui`.
+- The host owns `VIEW_OVERLAY` shared pointers, calls `VIEW::Remove` before releasing them, and refreshes the canvas after mutations.
+- The host removes per-frame overlays on the primary frame close event and remaining overlays before KIFACE shutdown. Synthetic tests validate ABI presence and invalid-handle behavior only; they do not exercise GAL rendering or close ordering.
+
 ### 4. Interaction and tool service
 - Register native tool actions and event observers per editor.
 - Passive observers must not consume pointer or keyboard events.
@@ -174,7 +181,7 @@ The harness is useful for loader mechanics only. It does not compile the product
 1. The synthetic KIFACE header is a test double, not a KiCad ABI projection. Real-proxy configuration now requires the exact KiCad source tree, matching wxWidgets include/library inputs, and an immutable ABI tag; a generated runtime fingerprint check and real-binary smoke test are still missing.
 2. The real-proxy CMake option is only a starting point. It does not yet discover the full KiCad build's generated headers, wxWidgets configuration, compile definitions, imported targets, runtime dependencies or exact module output layout.
 3. The ABI tag is currently reported to extensions but is not yet independently verified against the running KiCad executable; do not treat it as a runtime compatibility gate.
-4. The host API currently exposes logging, GUI dispatch and lifecycle callbacks only. GAL, object model, tools, placement, docking, selection and property-provider services are not implemented.
+4. The host API includes the first GAL overlay operations; object model, tools, placement, docking, selection and property-provider services are not implemented.
 5. The host scans a shared extension directory but has no manifest, dependency ordering, capability negotiation or per-extension enable/disable settings yet.
 6. The frame callback filters to the primary `FRAME_SCH` / `FRAME_PCB_EDITOR` window and now supplies borrowed opaque frame, canvas and GAL view handles. Canvas/view discovery uses `EDA_DRAW_FRAME::GetCanvas()` and `EDA_DRAW_PANEL_GAL::GetView()` from the exact headers; document and selection services remain unimplemented.
 7. The installer has no platform privilege-elevation flow and no integration with the running IPC add-on. It must schedule after *all* host processes exit and confirm executable identity/PID to avoid PID-reuse races.
