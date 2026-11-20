@@ -25,7 +25,7 @@ int initialize(const KUA_HostApi* host)
         !host->overlay_rectangle)
         return 0;
     if (host->overlay_create(nullptr, nullptr, nullptr) != 0 ||
-        host->overlay_destroy(nullptr) != -1 || host->overlay_clear(nullptr) != -1 ||
+        host->overlay_destroy(0) != -1 || host->overlay_clear(0) != -1 ||
         host->overlay_set_style(0, 0,0,0,1, 0,0,0,1, 1, 1,0) != -1 ||
         host->overlay_line(0, 0,0,1,1) != -1 ||
         host->overlay_circle(0, 0,0,1) != -1 ||
