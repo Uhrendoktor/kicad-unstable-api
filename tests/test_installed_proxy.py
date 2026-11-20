@@ -33,7 +33,7 @@ class InstalledProxyWorkflowTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.install_dir = self.root / "fake-kicad" / "PlugIns"
         self.proxy_dir = self.root / "proxy-payload"
-        extension_dir = self.install_dir / "clippy-native" / "extensions"
+        extension_dir = self.install_dir / "kicad-unstable-api" / "extensions"
         self.install_dir.mkdir(parents=True)
         self.proxy_dir.mkdir()
         extension_dir.mkdir(parents=True)
