@@ -17,7 +17,7 @@ This requires no custom KiCad executable, no special command-line arguments, no 
 
 ## Important limits
 
-This is not a stable KiCad C++ ABI. KIFACE's virtual interface and C++ object layouts can change. Public headers are not proof that all implementations are exported from KiCad's shared libraries. The prototype therefore uses an exact KIFACE ABI projection for the loader test and treats editor adapters as KiCad-build-specific.
+This is not a stable KiCad C++ ABI. KIFACE's virtual interface and C++ object layouts can change. Public headers are not proof that all implementations are exported from KiCad's shared libraries. The prototype currently uses a synthetic KIFACE test double for loader tests; production editor adapters must be built against the exact KiCad headers and binary ABI.
 
 The current cross-platform test target is a synthetic KIFACE host and original module. Passing CI proves dynamic module loading and forwarding on Windows, macOS and Linux; it does not prove compatibility with official KiCad binaries or successful GAL access in the real editors. The synthetic header is deliberately only a test double; the production ABI projection and exact-build gate remain to be implemented.
 
