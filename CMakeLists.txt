@@ -28,6 +28,22 @@ set_target_properties(kua_test_extension PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${KUA_EXTENSION_DIR}"
     RUNTIME_OUTPUT_DIRECTORY "${KUA_EXTENSION_DIR}")
 
+add_library(kua_original_pcbnew MODULE tests/native/original_kiface.cpp)
+target_include_directories(kua_original_pcbnew PRIVATE tests/native)
+set_target_properties(kua_original_pcbnew PROPERTIES
+    PREFIX "" OUTPUT_NAME "_pcbnew.original" SUFFIX "${KUA_KIFACE_SUFFIX}"
+    LIBRARY_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
+
+add_library(kua_proxy_pcbnew MODULE src/kiface_proxy.cpp)
+target_include_directories(kua_proxy_pcbnew PRIVATE include tests/native)
+target_compile_definitions(kua_proxy_pcbnew PRIVATE KUA_SYNTHETIC_ABI KUA_BUILD_EDITOR_PCB)
+target_link_libraries(kua_proxy_pcbnew PRIVATE ${CMAKE_DL_LIBS})
+set_target_properties(kua_proxy_pcbnew PROPERTIES
+    PREFIX "" OUTPUT_NAME "_pcbnew" SUFFIX "${KUA_KIFACE_SUFFIX}"
+    LIBRARY_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
+
 add_library(kua_proxy MODULE src/kiface_proxy.cpp)
 target_include_directories(kua_proxy PRIVATE include tests/native)
 target_compile_definitions(kua_proxy PRIVATE KUA_SYNTHETIC_ABI)
@@ -38,13 +54,13 @@ set_target_properties(kua_proxy PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
 
 add_executable(kua_proxy_test_host tests/native/test_host.cpp)
-target_include_directories(kua_proxy_test_host PRIVATE tests/native)
+target_include_directories(kua_proxy_test_host PRIVATE include tests/native)
 if(NOT WIN32)
     target_link_libraries(kua_proxy_test_host PRIVATE ${CMAKE_DL_LIBS})
 endif()
 
 if(MSVC)
-    foreach(target kua_original kua_test_extension kua_proxy kua_proxy_test_host)
+    foreach(target kua_original kua_original_pcbnew kua_test_extension kua_proxy kua_proxy_pcbnew kua_proxy_test_host)
         target_compile_options(${target} PRIVATE /W4 /permissive-)
     endforeach()
 else()
@@ -53,10 +69,10 @@ else()
     endforeach()
 endif()
 
-add_dependencies(kua_proxy kua_original kua_test_extension)
+add_dependencies(kua_proxy kua_original kua_test_extension)\nadd_dependencies(kua_proxy_pcbnew kua_original_pcbnew kua_test_extension)
 add_test(NAME kiface_proxy_forwarding
     COMMAND kua_proxy_test_host "$<TARGET_FILE:kua_proxy>" "$<TARGET_FILE:kua_test_extension>")
-set_tests_properties(kiface_proxy_forwarding PROPERTIES TIMEOUT 30)
+set_tests_properties(kiface_proxy_forwarding PROPERTIES TIMEOUT 30)\nadd_test(NAME pcb_kiface_proxy_forwarding\n    COMMAND kua_proxy_test_host "$<TARGET_FILE:kua_proxy_pcbnew>" "$<TARGET_FILE:kua_test_extension>" "2")\nset_tests_properties(pcb_kiface_proxy_forwarding PROPERTIES TIMEOUT 30)
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME python_modloader_unit
