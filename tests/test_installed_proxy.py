@@ -26,7 +26,8 @@ class InstalledProxyWorkflowTests(unittest.TestCase):
     suffix: str
 
     def setUp(self) -> None:
-        if not all((self.proxy, self.original, self.extension, self.test_host)):
+        required = ("proxy", "original", "extension", "test_host", "suffix")
+        if not all(getattr(type(self), name, None) for name in required):
             self.skipTest("native artifacts were not provided by the CMake test harness")
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
