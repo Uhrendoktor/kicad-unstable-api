@@ -323,7 +323,7 @@ private:
         if (module_path.empty())
             return;
 
-        const auto extension_dir = module_path.parent_path() / "clippy-native" / "extensions";
+        const auto extension_dir = module_path.parent_path() / "kicad-unstable-api" / "extensions";
         std::error_code ec;
         if (!std::filesystem::is_directory(extension_dir, ec))
             return;
