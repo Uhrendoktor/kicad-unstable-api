@@ -171,9 +171,9 @@ The harness is useful for loader mechanics only. It does not compile the product
 
 ## Current gaps in the prototype
 
-1. The synthetic KIFACE header is a test double, not a KiCad ABI projection. A production ABI projection and generated header/vtable consistency check are not yet implemented.
+1. The synthetic KIFACE header is a test double, not a KiCad ABI projection. Real-proxy configuration now requires the exact KiCad source tree, matching wxWidgets include/library inputs, and an immutable ABI tag; a generated runtime fingerprint check and real-binary smoke test are still missing.
 2. The real-proxy CMake option is only a starting point. It does not yet discover the full KiCad build's generated headers, wxWidgets configuration, compile definitions, imported targets, runtime dependencies or exact module output layout.
-3. No build fingerprint gate exists yet.
+3. The ABI tag is currently reported to extensions but is not yet independently verified against the running KiCad executable; do not treat it as a runtime compatibility gate.
 4. The host API currently exposes logging, GUI dispatch and lifecycle callbacks only. GAL, object model, tools, placement, docking, selection and property-provider services are not implemented.
 5. The host scans a shared extension directory but has no manifest, dependency ordering, capability negotiation or per-extension enable/disable settings yet.
 6. The frame callback reports a raw wxWindow pointer but does not identify the main editor frame, canvas, view, document or selection. It must be upgraded to an editor adapter callback after window construction.
