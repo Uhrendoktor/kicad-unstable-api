@@ -3,14 +3,12 @@
 #if defined(KUA_SYNTHETIC_ABI)
 #  include "synthetic_kiface.hpp"
 #else
-#  if defined(_WIN32) && !defined(BUILD_KIWAY_DLL)
-#    define BUILD_KIWAY_DLL
-#  endif
 #  include <kiway.h>
 #  include <wx/app.h>
 #endif
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <memory>
@@ -53,6 +51,8 @@ KUA_HostApi g_host_api{};
 KUA_ModuleHandle g_original_handle{};
 KIFACE* g_original_kiface{};
 bool g_extensions_initialized = false;
+bool g_extensions_shutdown = false;
+std::atomic<bool> g_gui_callbacks_enabled{true};
 
 void log_message(int level, const char* message)
 {
@@ -63,7 +63,7 @@ void log_message(int level, const char* message)
 #if defined(KUA_SYNTHETIC_ABI)
 int post_to_gui(KUA_GuiCallback callback, void* user_data)
 {
-    if (!callback)
+    if (!callback || !g_gui_callbacks_enabled.load(std::memory_order_acquire))
         return 0;
     callback(user_data);
     return 1;
@@ -77,12 +77,14 @@ struct DeferredCall
 
 int post_to_gui(KUA_GuiCallback callback, void* user_data)
 {
-    if (!callback || !wxTheApp)
+    if (!callback || !wxTheApp ||
+        !g_gui_callbacks_enabled.load(std::memory_order_acquire))
         return 0;
 
     auto* deferred = new DeferredCall{callback, user_data};
     wxTheApp->CallAfter([deferred]() {
-        deferred->callback(deferred->user_data);
+        if (g_gui_callbacks_enabled.load(std::memory_order_acquire))
+            deferred->callback(deferred->user_data);
         delete deferred;
     });
     return 1;
@@ -404,14 +406,21 @@ private:
 
     void shutdown_extensions()
     {
+        if (g_extensions_shutdown)
+            return;
+
+        // Stop queued callbacks before extension-owned state is torn down. CallAfter
+        // callbacks check this flag on the GUI thread before entering extension code.
+        g_gui_callbacks_enabled.store(false, std::memory_order_release);
+        g_extensions_shutdown = true;
+
         for (auto it = g_extensions.rbegin(); it != g_extensions.rend(); ++it)
         {
             if (it->api && it->api->shutdown)
                 it->api->shutdown();
         }
-        // Keep native modules loaded until process exit. KiCad may still have queued
-        // GUI callbacks or RTTI/vtable references originating in an extension.
-        g_extensions_initialized = false;
+        // Keep native modules loaded until process exit. KiCad may still retain
+        // RTTI/vtable references originating in an extension.
     }
 
     KIFACE* m_original{};
