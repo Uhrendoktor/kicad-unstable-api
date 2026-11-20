@@ -26,7 +26,7 @@ The intended end-user flow is:
 3. The helper atomically applies the staged replacements/restoration.
 4. The user starts KiCad normally; no special launcher or startup arguments are required.
 
-The current Python installer prototype in `tools/modloader.py` implements only the closed-process atomic install/uninstall step and its recovery rules. A process-waiting detached helper and privilege-elevation UX are not yet implemented. Therefore this prototype is not yet wired into the live IPC plugin. Do not tell users that an install action can safely swap a loaded KIFACE module on Windows.
+The Python helper in `tools/modloader.py` implements the closed-process atomic install/uninstall step, hash verification, rollback, and a detached process-waiting helper (`schedule_install` / `schedule_uninstall`). It is not yet wired into the live IPC plugin, and it does not verify the identity of the supplied PID or provide privilege-elevation UX. The caller must verify the PID belongs to the KiCad process and ensure every process using the installation has exited. Do not swap a loaded KIFACE module in place.
 
 The install directory is commonly protected:
 - Windows may require elevation for Program Files installations.
@@ -51,7 +51,7 @@ The proxy is loaded with `dlopen(..., RTLD_NOW | RTLD_GLOBAL)`. The preserved or
 
 The forwarding class must be compiled against the exact KiCad `include/kiway.h` and matching generated headers. The KIFACE header explicitly states that virtual function order establishes the vtable sequence. A change in method order/signature or compiler ABI invalidates the proxy.
 
-The proxy source overrides all KIFACE slots in the source revision inspected. It is not a generic ABI-stable loader and must be rebuilt for each supported KiCad build. A version/build fingerprint gate is required before production use.
+The proxy source overrides all KIFACE slots in the inspected source revision. The real-proxy CMake target includes the supplied source tree's `kiway.h`, so the compiler checks override signatures against that header. On Windows the proxy exports its own `KIFACE_1` declaration; it deliberately does not define `BUILD_KIWAY_DLL`, which would make `kiway.h` emit a second import/export-decorated declaration. This is not a generic ABI-stable loader and must be rebuilt for each supported KiCad build. A verified source/build fingerprint gate and runtime compatibility check are still required before production use.
 
 ## What CI proves
 
@@ -61,6 +61,7 @@ The synthetic test harness builds fake original KIFACE modules and proxies for b
 - forwarding every KIFACE virtual slot;
 - loading a third-party extension module from the extension directory;
 - extension initialize, editor-window, reset and shutdown callbacks;
+- rejection of new GUI dispatch requests after extension shutdown;
 - Python install/restore of both editor proxies against a temporary fake KiCad plugin directory;
 - loading both installed proxies and restoring byte-identical originals.
 
