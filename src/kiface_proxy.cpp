@@ -49,6 +49,7 @@ struct LoadedExtension
 };
 
 std::vector<LoadedExtension> g_extensions;
+KUA_HostApi g_host_api{};
 KUA_ModuleHandle g_original_handle{};
 KIFACE* g_original_kiface{};
 bool g_extensions_initialized = false;
@@ -328,7 +329,7 @@ private:
         if (!std::filesystem::is_directory(extension_dir, ec))
             return;
 
-        const auto host = make_host_api();
+        g_host_api = make_host_api();
         for (const auto& entry : std::filesystem::directory_iterator(extension_dir, ec))
         {
             if (ec || !entry.is_regular_file())
@@ -368,7 +369,7 @@ private:
                 continue;
             }
 
-            if (api->initialize(&host) == 0)
+            if (api->initialize(&g_host_api) == 0)
             {
                 log_message(2, ("Extension initialization failed: " +
                                 std::string(api->extension_id ? api->extension_id : "<unnamed>")).c_str());
@@ -396,11 +397,9 @@ private:
                 const KUA_ExtensionApi* api;
                 KUA_EditorContext context;
             };
-            auto* notification = new Notification{extension.api, context};
-            post_to_gui([](void* opaque) {
-                std::unique_ptr<Notification> value(static_cast<Notification*>(opaque));
-                value->api->on_editor_window_created(&value->context);
-            }, notification);
+            // CreateKiWindow is a GUI-thread lifecycle callback. Invoke synchronously
+            // so the wxWindow pointer cannot go stale while a deferred callback waits.
+            extension.api->on_editor_window_created(&context);
         }
     }
 
