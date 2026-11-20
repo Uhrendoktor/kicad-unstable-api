@@ -19,18 +19,18 @@ This requires no custom KiCad executable, no special command-line arguments, no 
 
 This is not a stable KiCad C++ ABI. KIFACE's virtual interface and C++ object layouts can change. Public headers are not proof that all implementations are exported from KiCad's shared libraries. The prototype therefore uses an exact KIFACE ABI projection for the loader test and treats editor adapters as KiCad-build-specific.
 
-The current cross-platform test target is a synthetic KIFACE host and original module. Passing CI proves dynamic module loading and forwarding on Windows, macOS and Linux; it does not yet prove compatibility with official KiCad binaries or successful GAL access in the real editors.
+The current cross-platform test target is a synthetic KIFACE host and original module. Passing CI proves dynamic module loading and forwarding on Windows, macOS and Linux; it does not prove compatibility with official KiCad binaries or successful GAL access in the real editors. The synthetic header is deliberately only a test double; the production ABI projection and exact-build gate remain to be implemented.
 
 ## Repository map
 
 - docs/research.md — KiCad loader, exported symbols, and C++ API boundaries.
 - docs/use-case-matrix.md — requirements derived from kicad-blocks, kicad-jlcpcb-interface and kicad-clippy.
 - docs/platform-loader.md — platform mechanics, installation, recovery and validation plan.
-- include/kicad_unstable_api/kiface_abi.hpp — minimal versioned KIFACE ABI projection used by the prototype.
+- tests/native/synthetic_kiface.hpp — synthetic KIFACE ABI test double; not a KiCad header projection.
 - include/kicad_unstable_api/extension_api.h — C ABI for privately maintained native extension modules.
 - src/kiface_proxy.cpp — cross-platform proxy KIFACE implementation.
 - tools/modloader.py — reversible install/uninstall prototype.
-- tests/ and .github/workflows/ci.yml — synthetic host tests on Windows, macOS and Linux.
+- docs/implementation-plan.md — capability API, project acceptance tests, platform matrix and delivery gates.\n- tests/ and .github/workflows/native-loader.yml — synthetic host tests on Windows, macOS and Linux.
 
 ## Build and test
 
@@ -46,4 +46,4 @@ Installer tests:
 
 ## Status
 
-Prototype stage. Do not install into a production KiCad installation without a complete backup and a way to restore the original KIFACE modules. The next acceptance gate is a real KiCad 11 nightly smoke test on each operating system.
+Prototype stage. Do not install into a production KiCad installation without a complete backup and a way to restore the original KIFACE modules. The next acceptance gates are (1) a passing synthetic loader/installer matrix on all three operating systems, then (2) real KiCad 11+ editor smoke tests and a version-specific native adapter on each operating system.
