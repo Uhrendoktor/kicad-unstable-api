@@ -81,7 +81,8 @@ struct OverlayState
     std::shared_ptr<KIGFX::VIEW_OVERLAY> overlay;
 };
 
-std::unordered_map<void*, std::unique_ptr<OverlayState>> g_overlays;
+std::unordered_map<uint64_t, std::unique_ptr<OverlayState>> g_overlays;
+uint64_t g_next_overlay_handle = 1;
 struct EditorFrameState { EDA_DRAW_PANEL_GAL* canvas{}; KIGFX::VIEW* view{}; };
 std::unordered_map<void*, EditorFrameState> g_editor_frames;
 
@@ -90,7 +91,7 @@ bool on_gui_thread()
     return wxIsMainThread() && g_gui_callbacks_enabled.load(std::memory_order_acquire);
 }
 
-OverlayState* find_overlay(void* handle)
+OverlayState* find_overlay(uint64_t handle)
 {
     const auto it = g_overlays.find(handle);
     return it == g_overlays.end() ? nullptr : it->second.get();
@@ -168,36 +169,38 @@ int post_to_gui(KUA_GuiCallback callback, void* user_data)
 #endif
 
 #if defined(KUA_SYNTHETIC_ABI)
-void* overlay_create(void*, void*, void*) { return nullptr; }
-int32_t overlay_destroy(void*) { return -1; }
-int32_t overlay_clear(void*) { return -1; }
-int32_t overlay_set_style(void*, double, double, double, double, double, double, double, double,
+uint64_t overlay_create(void*, void*, void*) { return 0; }
+int32_t overlay_destroy(uint64_t) { return -1; }
+int32_t overlay_clear(uint64_t) { return -1; }
+int32_t overlay_set_style(uint64_t, double, double, double, double, double, double, double, double,
                           double, int32_t, int32_t) { return -1; }
-int32_t overlay_line(void*, double, double, double, double) { return -1; }
-int32_t overlay_circle(void*, double, double, double) { return -1; }
-int32_t overlay_rectangle(void*, double, double, double, double) { return -1; }
+int32_t overlay_line(uint64_t, double, double, double, double) { return -1; }
+int32_t overlay_circle(uint64_t, double, double, double) { return -1; }
+int32_t overlay_rectangle(uint64_t, double, double, double, double) { return -1; }
 #else
-void* overlay_create(void* frame, void* canvas, void* view)
+uint64_t overlay_create(void* frame, void* canvas, void* view)
 {
     if (!on_gui_thread() || !frame || !canvas || !view)
-        return nullptr;
+        return 0;
     const auto frame_it = g_editor_frames.find(frame);
     if (frame_it == g_editor_frames.end() || frame_it->second.canvas != canvas ||
         frame_it->second.view != view)
-        return nullptr;
+        return 0;
     auto state = std::make_unique<OverlayState>();
     state->frame = frame;
     state->canvas = static_cast<EDA_DRAW_PANEL_GAL*>(canvas);
     state->view = static_cast<KIGFX::VIEW*>(view);
     state->overlay = state->view->MakeOverlay();
     if (!state->overlay)
-        return nullptr;
-    void* handle = state.get();
+        return 0;
+    uint64_t handle = g_next_overlay_handle++;
+    if (handle == 0)
+        handle = g_next_overlay_handle++;
     g_overlays.emplace(handle, std::move(state));
     return handle;
 }
 
-int32_t overlay_destroy(void* handle)
+int32_t overlay_destroy(uint64_t handle)
 {
     if (!on_gui_thread())
         return -1;
@@ -213,7 +216,7 @@ int32_t overlay_destroy(void* handle)
     return 1;
 }
 
-int32_t overlay_clear(void* handle)
+int32_t overlay_clear(uint64_t handle)
 {
     if (!on_gui_thread())
         return -1;
@@ -225,7 +228,7 @@ int32_t overlay_clear(void* handle)
     return 1;
 }
 
-int32_t overlay_set_style(void* handle, double sr, double sg, double sb, double sa,
+int32_t overlay_set_style(uint64_t handle, double sr, double sg, double sb, double sa,
                           double fr, double fg, double fb, double fa, double width,
                           int32_t stroke, int32_t fill)
 {
@@ -245,7 +248,7 @@ int32_t overlay_set_style(void* handle, double sr, double sg, double sb, double 
     return 1;
 }
 
-int32_t overlay_line(void* handle, double x1, double y1, double x2, double y2)
+int32_t overlay_line(uint64_t handle, double x1, double y1, double x2, double y2)
 {
     if (!on_gui_thread())
         return -1;
@@ -257,7 +260,7 @@ int32_t overlay_line(void* handle, double x1, double y1, double x2, double y2)
     return 1;
 }
 
-int32_t overlay_circle(void* handle, double cx, double cy, double radius)
+int32_t overlay_circle(uint64_t handle, double cx, double cy, double radius)
 {
     if (!on_gui_thread() || radius < 0.0)
         return -1;
@@ -269,7 +272,7 @@ int32_t overlay_circle(void* handle, double cx, double cy, double radius)
     return 1;
 }
 
-int32_t overlay_rectangle(void* handle, double x1, double y1, double x2, double y2)
+int32_t overlay_rectangle(uint64_t handle, double x1, double y1, double x2, double y2)
 {
     if (!on_gui_thread())
         return -1;
