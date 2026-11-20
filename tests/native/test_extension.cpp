@@ -1,5 +1,6 @@
 #include "kicad_unstable_api/extension_api.h"
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #if defined(_WIN32)
 #  define TEST_EXPORT __declspec(dllexport)
