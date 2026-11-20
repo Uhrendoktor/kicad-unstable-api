@@ -12,7 +12,8 @@ else()
 endif()
 
 set(KUA_MODULE_DIR "${CMAKE_BINARY_DIR}/modules")
-set(KUA_EXTENSION_DIR "${KUA_MODULE_DIR}/kicad-unstable-api/extensions")
+set(KUA_RUNTIME_MODULE_DIR "${KUA_MODULE_DIR}/$<CONFIG>")
+set(KUA_EXTENSION_DIR "${KUA_RUNTIME_MODULE_DIR}/kicad-unstable-api/extensions")
 
 add_library(kua_test_extension SHARED tests/native/test_extension.cpp)
 target_include_directories(kua_test_extension PRIVATE include)
@@ -26,8 +27,8 @@ foreach(editor eeschema pcbnew)
     target_include_directories(kua_original_${editor} PRIVATE tests/native)
     set_target_properties(kua_original_${editor} PROPERTIES
         PREFIX "" OUTPUT_NAME "_${editor}.original" SUFFIX "${KUA_KIFACE_SUFFIX}"
-        LIBRARY_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
+        LIBRARY_OUTPUT_DIRECTORY "${KUA_RUNTIME_MODULE_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY "${KUA_RUNTIME_MODULE_DIR}")
 
     add_library(kua_proxy_${editor} MODULE src/kiface_proxy.cpp)
     target_include_directories(kua_proxy_${editor} PRIVATE include tests/native)
