@@ -16,6 +16,9 @@ A generated per-build SDK should record all five categories. Do not describe all
 
 ## GAL and transient overlays
 
+The host C ABI now has an initial overlay slice: create/destroy/clear, RGBA stroke/fill style, line, circle and rectangle. Handles are opaque and host-owned. Calls are GUI-thread-only and must be dispatched with `post_to_gui`; geometry arguments use KiCad world coordinates (internal units), not screen pixels or millimetres. `VIEW::MakeOverlay()` already attaches the overlay to the view; the host retains the returned `shared_ptr`, removes the overlay from the view before releasing it, and refreshes the canvas after mutations. Synthetic tests verify function-table presence and invalid-handle behavior only; actual rendering and frame-close ordering still require a real KiCad GUI test.
+
+
 Relevant interfaces:
 - `EDA_DRAW_FRAME::GetCanvas()`
 - `EDA_DRAW_PANEL_GAL::GetView()`
