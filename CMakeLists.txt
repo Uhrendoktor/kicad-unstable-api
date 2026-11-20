@@ -30,7 +30,7 @@ set_target_properties(kua_test_extension PROPERTIES
 
 add_library(kua_proxy MODULE src/kiface_proxy.cpp)
 target_include_directories(kua_proxy PRIVATE include tests/native)
-target_compile_definitions(kua_proxy PRIVATE KUA_SYNTHETIC_ABI KUA_EDITOR_SCHEMATIC)
+target_compile_definitions(kua_proxy PRIVATE KUA_SYNTHETIC_ABI)
 target_link_libraries(kua_proxy PRIVATE ${CMAKE_DL_LIBS})
 set_target_properties(kua_proxy PROPERTIES
     PREFIX "" OUTPUT_NAME "_eeschema" SUFFIX "${KUA_KIFACE_SUFFIX}"
@@ -84,9 +84,9 @@ if(KUA_BUILD_REAL_KICAD_PROXIES)
         target_include_directories(kua_proxy_${editor} PRIVATE include ${KUA_KICAD_INCLUDE_DIRS} ${wxWidgets_INCLUDE_DIRS})
         target_compile_definitions(kua_proxy_${editor} PRIVATE BUILD_KIWAY_DLL)
         if(editor STREQUAL "pcbnew")
-            target_compile_definitions(kua_proxy_${editor} PRIVATE KUA_EDITOR_PCB)
+            target_compile_definitions(kua_proxy_${editor} PRIVATE KUA_BUILD_EDITOR_PCB)
         else()
-            target_compile_definitions(kua_proxy_${editor} PRIVATE KUA_EDITOR_SCHEMATIC)
+            target_compile_definitions(kua_proxy_${editor} PRIVATE KUA_BUILD_EDITOR_SCHEMATIC)
         endif()
         target_link_libraries(kua_proxy_${editor} PRIVATE ${KUA_KICAD_LIBRARIES} ${wxWidgets_LIBRARIES} ${CMAKE_DL_LIBS})
         set_target_properties(kua_proxy_${editor} PROPERTIES PREFIX "" OUTPUT_NAME "_${editor}" SUFFIX "${KUA_KIFACE_SUFFIX}")

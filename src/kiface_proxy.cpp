@@ -36,8 +36,8 @@ extern "C" KUA_EXPORT KIFACE* KIFACE_1(int* version, int kiway_version, PGM_BASE
 
 namespace
 {
-#if defined(KUA_EDITOR_PCB)
-constexpr uint32_t kEditorKind = KUA_EDITOR_PCB;
+#if defined(KUA_BUILD_EDITOR_PCB)
+constexpr uint32_t kEditorKind = KUA_BUILD_EDITOR_PCB;
 #else
 constexpr uint32_t kEditorKind = KUA_EDITOR_SCHEMATIC;
 #endif
