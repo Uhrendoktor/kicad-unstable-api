@@ -137,3 +137,8 @@ Sources:
 - Finding tabs: severity/rule filters, explanation, help, related objects.
 - Fix tabs: preview edits, apply via native commits, verify by reparsing and rerunning ERC/DRC/rules.
 - Component-intent property page: typed roles, decoupling relationship (root IC/pin, target and return terminals/nets, constraints), test point and connector roles.
+
+
+## Current frame context handles
+
+The lifecycle callback is emitted only for the primary Eeschema or PCB Editor frame. Its KUA_EditorContext includes borrowed opaque handles for the frame, GAL canvas and KIGFX::VIEW. These pointers are host-owned and must not be deleted; extensions must not retain them after the corresponding editor frame closes. The synthetic host supplies null canvas/view handles, so only the real KiCad adapter can validate their contents. The next API layer must expose capability functions for overlays and editor operations rather than requiring extensions to call KiCad C++ methods directly.

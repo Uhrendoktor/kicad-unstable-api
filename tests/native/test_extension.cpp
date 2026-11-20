@@ -29,7 +29,8 @@ void on_window(const KUA_EditorContext* context)
 {
     if (context && context->editor_kind == static_cast<uint32_t>(metrics[EditorKind]) &&
         context->class_id == 123 &&
-        context->frame == reinterpret_cast<void*>(static_cast<uintptr_t>(0x1234)))
+        context->frame == reinterpret_cast<void*>(static_cast<uintptr_t>(0x1234)) &&
+        context->struct_size >= sizeof(KUA_EditorContext) && !context->canvas && !context->view)
         ++metrics[WindowCreated];
 }
 void on_reset(uint32_t editor_kind)

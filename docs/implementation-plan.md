@@ -176,7 +176,7 @@ The harness is useful for loader mechanics only. It does not compile the product
 3. The ABI tag is currently reported to extensions but is not yet independently verified against the running KiCad executable; do not treat it as a runtime compatibility gate.
 4. The host API currently exposes logging, GUI dispatch and lifecycle callbacks only. GAL, object model, tools, placement, docking, selection and property-provider services are not implemented.
 5. The host scans a shared extension directory but has no manifest, dependency ordering, capability negotiation or per-extension enable/disable settings yet.
-6. The frame callback now filters to the primary `FRAME_SCH` / `FRAME_PCB_EDITOR` window, but still reports only a raw wxWindow pointer; canvas, view, document and selection discovery require the version-specific editor adapter.
+6. The frame callback filters to the primary `FRAME_SCH` / `FRAME_PCB_EDITOR` window and now supplies borrowed opaque frame, canvas and GAL view handles. Canvas/view discovery uses `EDA_DRAW_FRAME::GetCanvas()` and `EDA_DRAW_PANEL_GAL::GetView()` from the exact headers; document and selection services remain unimplemented.
 7. The installer has no platform privilege-elevation flow and no integration with the running IPC add-on. It must schedule after *all* host processes exit and confirm executable identity/PID to avoid PID-reuse races.
 8. CI now tests both synthetic editor faces and their joint install/restore workflow. Real KiCad Eeschema/PCB Editor injection and GUI behavior still need separate integration coverage.
 9. The deferred-helper zombie-process wait bug is fixed; the current CI matrix exercises the helper on Windows, macOS and Linux.

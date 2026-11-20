@@ -25,6 +25,9 @@ typedef struct KUA_EditorContext
     void* frame;
     void* program;
     void* kiway;
+    /* Borrowed, host-owned handles; valid only while the editor frame remains alive. */
+    void* canvas;
+    void* view;
 } KUA_EditorContext;
 
 typedef void (*KUA_GuiCallback)(void* user_data);

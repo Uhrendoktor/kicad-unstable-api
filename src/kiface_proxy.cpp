@@ -4,6 +4,7 @@
 #  include "synthetic_kiface.hpp"
 #else
 #  include <kiway.h>
+#  include <eda_draw_frame.h>
 #  include <wx/app.h>
 #endif
 
@@ -253,6 +254,14 @@ public:
             context.frame = window;
             context.program = m_program;
             context.kiway = kiway;
+#if !defined(KUA_SYNTHETIC_ABI)
+            // The class ID filter above guarantees this is an EDA_DRAW_FRAME.
+            // These accessors are inline/virtual in the exact KiCad headers.
+            auto* draw_frame = static_cast<EDA_DRAW_FRAME*>(window);
+            auto* canvas = draw_frame->GetCanvas();
+            context.canvas = canvas;
+            context.view = canvas ? canvas->GetView() : nullptr;
+#endif
             notify_window_created(context);
         }
         return window;
