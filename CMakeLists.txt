@@ -39,8 +39,8 @@ foreach(editor eeschema pcbnew)
     target_link_libraries(kua_proxy_${editor} PRIVATE ${CMAKE_DL_LIBS})
     set_target_properties(kua_proxy_${editor} PROPERTIES
         PREFIX "" OUTPUT_NAME "_${editor}" SUFFIX "${KUA_KIFACE_SUFFIX}"
-        LIBRARY_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY "${KUA_MODULE_DIR}")
+        LIBRARY_OUTPUT_DIRECTORY "${KUA_RUNTIME_MODULE_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY "${KUA_RUNTIME_MODULE_DIR}")
     add_dependencies(kua_proxy_${editor} kua_original_${editor} kua_test_extension)
 endforeach()
 
