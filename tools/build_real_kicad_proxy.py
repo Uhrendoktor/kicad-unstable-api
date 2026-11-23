@@ -156,10 +156,11 @@ def main() -> int:
         )
 
         entries = json.loads(compile_db.read_text(encoding="utf-8"))
-        args.output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = args.output_dir.resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
         for editor, relative_source in EDITOR_SOURCES.items():
             entry = resolve_entry(entries, relative_source)
-            output = args.output_dir / f"_{editor}.kiface"
+            output = output_dir / f"_{editor}.kiface"
             command = make_link_command(entry, proxy_source, output, editor, head)
             print(f"[{editor}] compiler command from {relative_source}")
             if args.dry_run:
