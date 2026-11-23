@@ -58,6 +58,10 @@ Each KUA call should map to an existing native method/event or a mechanical sequ
 | `overlay_line/circle/rectangle` | Initial GAL primitives | Implemented |
 | `KUA_EditorContext.frame/canvas/view` | Borrowed editor handles | Implemented |
 | extension lifecycle callbacks | Initialize, editor-created, reset and shutdown | Implemented |
+| `ui_window_get_top_level_windows` | Enumerate top-level windows owned by an editor frame | Unverified |
+| `ui_window_observe/unobserve` | Observe native window show/hide/destroy events without consuming KiCad events | Unverified |
+| native window destroy tracking | Invalidate window and owned sizer/property handles when the wxWindow is destroyed | Unverified |
+| precise menu callback unbind | Remove only KUA's own `wxEVT_MENU` handler for its ID | Unverified |
 
 ## 3. Native windows and controls
 
@@ -78,6 +82,10 @@ Expose wxWidgets windows and controls so plugins can create native subwindows in
 - `UI.Window.FindChildrenByClass(parent, wx_class_name, recursive)`
 - `UI.Window.GetState(handle)` (shown, enabled, focused, iconized, geometry)
 - `UI.Window.BindEvent/UnbindEvent(handle, event_type, callback_id)`
+
+The current native binding slice adds `ui_window_get_top_level_windows(editor_frame, handles, capacity)`, which lists top-level wxWindows whose parent chain leads to the given editor. This includes native modal Properties dialogs parented to that editor. It also adds `ui_window_observe(editor_frame, callback, user_data)` / `ui_window_unobserve(observer)`. Observers receive opaque handles and one of `KUA_UI_WINDOW_SHOWN`, `KUA_UI_WINDOW_HIDDEN` or `KUA_UI_WINDOW_DESTROYING`. The observer is a thin `wxEventFilter` over existing wxWidgets events; it always returns `Event_Skip` so KiCad continues processing them normally. Notifications run on the GUI thread. A handle received for `DESTROYING` is valid only during that callback.
+
+Every registered native window has a `wxEVT_DESTROY` cleanup hook. Destroying a window invalidates its window handle and handles for resources owned by that window, including an attached sizer or property grid. Destroying the editor invalidates all remaining handles and removes its observers. These lifetime rules apply to native windows destroyed by KiCad as well as windows explicitly destroyed through KUA.
 
 Supported control kinds should include wxDialog, wxFrame, wxPanel, wxNotebook, wxButton, wxTextCtrl, wxChoice, wxCheckBox, wxStaticText, wxListCtrl, wxTreeCtrl, wxGrid and wxPropertyGrid. Add native wxWidgets control types as required; do not create feature-specific KUA widgets.
 
@@ -133,7 +141,7 @@ Expose wxMenuBar/wxMenu methods and events so plugins can insert their own menu 
 - `UI.Menu.SetLabel(menu, id, label)`
 - `UI.Menu.BindEvent/UnbindEvent(frame, menu_id, callback_id)`
 
-Use unique IDs. Plugins remove their own entries and unbind their own handlers when unloading.
+Use unique IDs. Menu callbacks use a named native event thunk, so unbinding removes only the matching KUA callback and does not disconnect unrelated KiCad or plugin handlers sharing a menu ID. Editor close and extension shutdown disconnect outstanding KUA menu handlers before their callback state is released.
 
 Expose existing ACTION_MANAGER/toolbar methods where available: list/run registered actions, get a toolbar, add/delete/enable tool items and bind their native command events. Do not implement a new KUA action or hotkey framework.
 
