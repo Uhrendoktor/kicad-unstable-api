@@ -44,7 +44,9 @@ int initialize(const KUA_HostApi* host)
     if (!host || host->abi_version != KUA_EXTENSION_ABI_V1 ||
         host->struct_size < sizeof(KUA_HostApi) || !host->overlay_create ||
         !host->overlay_destroy || !host->overlay_set_style || !host->overlay_line ||
-        !host->overlay_circle || !host->overlay_rectangle)
+        !host->overlay_circle || !host->overlay_rectangle ||
+        !host->ui_window_get_top_level_windows || !host->ui_window_observe ||
+        !host->ui_window_unobserve)
     {
         record("initialize-rejected", host ? host->editor_kind : KUA_EDITOR_UNKNOWN,
                "invalid-host-api-descriptor");
