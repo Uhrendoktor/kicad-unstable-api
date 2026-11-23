@@ -141,7 +141,7 @@ Expose wxMenuBar/wxMenu methods and events so plugins can insert their own menu 
 - `UI.Menu.SetLabel(menu, id, label)`
 - `UI.Menu.BindEvent/UnbindEvent(frame, menu_id, callback_id)`
 
-Use unique IDs. Menu callbacks use a named native event thunk, so unbinding removes only the matching KUA callback and does not disconnect unrelated KiCad or plugin handlers sharing a menu ID. Editor close and extension shutdown disconnect outstanding KUA menu handlers before their callback state is released.
+Use unique IDs. Menu callbacks use a per-binding wxEvtHandler object attached to the target frame; dispatch is independent of wxCommandEvent::GetEventObject(), which wxWidgets sets to the source wxMenu. Unbinding removes only the matching handler object and ID, leaving unrelated KiCad or plugin handlers intact. Editor close and extension shutdown disconnect outstanding KUA menu handlers before their callback state is released.
 
 Expose existing ACTION_MANAGER/toolbar methods where available: list/run registered actions, get a toolbar, add/delete/enable tool items and bind their native command events. Do not implement a new KUA action or hotkey framework.
 
