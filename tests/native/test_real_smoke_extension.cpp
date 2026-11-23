@@ -23,11 +23,16 @@ void record(const char* event, uint32_t editor_kind, const char* details = "")
 
 int initialize(const KUA_HostApi* host)
 {
+    record("initialize-entered", host ? host->editor_kind : KUA_EDITOR_UNKNOWN);
     if (!host || host->abi_version != KUA_EXTENSION_ABI_V1 ||
         host->struct_size < sizeof(KUA_HostApi) || !host->overlay_create ||
         !host->overlay_destroy || !host->overlay_set_style || !host->overlay_line ||
         !host->overlay_circle || !host->overlay_rectangle)
+    {
+        record("initialize-rejected", host ? host->editor_kind : KUA_EDITOR_UNKNOWN,
+               "invalid-host-api-descriptor");
         return 0;
+    }
 
     g_host = host;
     record("initialize", host->editor_kind, host->host_build_tag ? host->host_build_tag : "");
