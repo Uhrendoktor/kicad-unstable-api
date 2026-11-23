@@ -400,7 +400,7 @@ uint64_t ui_window_get_handle(void* borrowed_window)
     {
         (void)state;
         if (frame == borrowed_window)
-            return register_ui_handle(frame, UiHandleKind::Window, frame);
+            return register_ui_window(static_cast<wxWindow*>(frame), frame);
     }
 
     return 0;
@@ -456,8 +456,7 @@ uint64_t ui_window_create(uint64_t parent_handle, uint32_t kind, int32_t id,
     if (!window)
         return 0;
 
-    return register_ui_handle(window, UiHandleKind::Window,
-                              g_ui_handles[parent_handle].frame);
+    return register_ui_window(window, g_ui_handles[parent_handle].frame);
 }
 
 int32_t ui_window_destroy(uint64_t handle)
@@ -494,11 +493,71 @@ int32_t ui_window_get_children(uint64_t parent_handle, uint64_t* handles, uint32
     for (wxWindowList::compatibility_iterator node = children.GetFirst(); node; node = node->GetNext())
     {
         if (handles && static_cast<uint32_t>(count) < capacity)
-            handles[count] = register_ui_handle(node->GetData(), UiHandleKind::Window,
-                                                g_ui_handles[parent_handle].frame);
+            handles[count] = register_ui_window(node->GetData(), g_ui_handles[parent_handle].frame);
         ++count;
     }
     return count;
+}
+
+int32_t ui_window_get_top_level_windows(uint64_t editor_frame_handle,
+                                            uint64_t* handles, uint32_t capacity)
+{
+    if (!on_gui_thread())
+        return -1;
+    wxWindow* editor_frame = find_ui_window(editor_frame_handle);
+    if (!editor_frame)
+        return -1;
+
+    int32_t count = 0;
+    for (wxWindowList::compatibility_iterator node = wxTopLevelWindows.GetFirst();
+         node; node = node->GetNext())
+    {
+        wxWindow* window = node->GetData();
+        if (!window_belongs_to_editor(window, editor_frame))
+            continue;
+        if (handles && static_cast<uint32_t>(count) < capacity)
+            handles[count] = register_ui_window(window, editor_frame);
+        ++count;
+    }
+    return count;
+}
+
+uint64_t ui_window_observe(uint64_t editor_frame_handle,
+                           KUA_UiWindowEventCallback callback, void* user_data)
+{
+    if (!on_gui_thread() || !callback)
+        return 0;
+    wxWindow* frame = find_ui_window(editor_frame_handle);
+    if (!frame)
+        return 0;
+
+    uint64_t observer = g_next_ui_handle++;
+    if (observer == 0)
+        observer = g_next_ui_handle++;
+    const bool first_observer = g_window_observers.empty();
+    g_window_observers.emplace(observer, WindowObserverEntry{frame, callback, user_data});
+    if (first_observer && !g_window_event_filter_installed)
+    {
+        wxEvtHandler::AddFilter(&g_window_event_filter);
+        g_window_event_filter_installed = true;
+    }
+    return observer;
+}
+
+int32_t ui_window_unobserve(uint64_t observer)
+{
+    if (!on_gui_thread())
+        return -1;
+    const auto it = g_window_observers.find(observer);
+    if (it == g_window_observers.end())
+        return -1;
+    g_window_observers.erase(it);
+    if (g_window_observers.empty() && g_window_event_filter_installed)
+    {
+        wxEvtHandler::RemoveFilter(&g_window_event_filter);
+        g_window_event_filter_installed = false;
+    }
+    return 1;
 }
 
 int32_t ui_window_get_class_name(uint64_t handle, char* buffer, uint32_t capacity)
@@ -576,6 +635,7 @@ int32_t ui_window_set_sizer(uint64_t window_handle, uint64_t sizer_handle)
         return -1;
     window->SetSizer(static_cast<wxSizer*>(entry->pointer));
     entry->frame = g_ui_handles[window_handle].frame;
+    entry->owner_window = window;
     return 1;
 }
 
@@ -657,7 +717,7 @@ uint64_t ui_menu_bar_get(uint64_t frame_handle)
     wxWindow* window = find_ui_window(frame_handle);
     auto* frame = dynamic_cast<wxFrame*>(window);
     return frame ? register_ui_handle(frame->GetMenuBar(), UiHandleKind::MenuBar,
-                                      g_ui_handles[frame_handle].frame) : 0;
+                                      g_ui_handles[frame_handle].frame, frame) : 0;
 }
 
 uint64_t ui_menu_create(uint64_t frame_handle)
@@ -665,7 +725,7 @@ uint64_t ui_menu_create(uint64_t frame_handle)
     if (!on_gui_thread() || !find_ui_window(frame_handle))
         return 0;
     return register_ui_handle(new wxMenu(), UiHandleKind::Menu,
-                              g_ui_handles[frame_handle].frame);
+                              g_ui_handles[frame_handle].frame, find_ui_window(frame_handle));
 }
 
 int32_t ui_menu_append(uint64_t menu_handle, int32_t id, const char* label,
@@ -727,11 +787,19 @@ uint64_t ui_menu_bind(uint64_t frame_handle, int32_t id, KUA_GuiCallback callbac
     wxWindow* frame = find_ui_window(frame_handle);
     if (!frame)
         return 0;
-    frame->Bind(wxEVT_MENU, [callback, user_data](wxCommandEvent&) { callback(user_data); }, id);
+
+    for (const auto& [binding, entry] : g_menu_bindings)
+    {
+        (void)binding;
+        if (entry.frame == frame && entry.id == id)
+            return 0;
+    }
+
+    frame->Bind(wxEVT_MENU, &menu_event_thunk, id, id);
     uint64_t binding = g_next_ui_handle++;
     if (binding == 0)
         binding = g_next_ui_handle++;
-    g_menu_bindings.emplace(binding, MenuBindingEntry{frame, id});
+    g_menu_bindings.emplace(binding, MenuBindingEntry{frame, id, callback, user_data});
     return binding;
 }
 
@@ -742,7 +810,9 @@ int32_t ui_menu_unbind(uint64_t binding)
     const auto it = g_menu_bindings.find(binding);
     if (it == g_menu_bindings.end())
         return -1;
-    it->second.frame->Disconnect(it->second.id, it->second.id, wxEVT_MENU);
+    if (!it->second.frame->Unbind(wxEVT_MENU, &menu_event_thunk,
+                                  it->second.id, it->second.id))
+        return -1;
     g_menu_bindings.erase(it);
     return 1;
 }
@@ -833,8 +903,7 @@ uint64_t ui_properties_get_panel(uint64_t frame_handle)
     if (!frame)
         return 0;
     PROPERTIES_PANEL* panel = frame->GetPropertiesPanel();
-    return panel ? register_ui_handle(panel, UiHandleKind::Window,
-                                      g_ui_handles[frame_handle].frame) : 0;
+    return panel ? register_ui_window(panel, g_ui_handles[frame_handle].frame) : 0;
 }
 
 uint64_t ui_properties_get_grid(uint64_t panel_handle)
@@ -844,7 +913,7 @@ uint64_t ui_properties_get_grid(uint64_t panel_handle)
     wxWindow* window = find_ui_window(panel_handle);
     auto* panel = dynamic_cast<PROPERTIES_PANEL*>(window);
     return panel ? register_ui_handle(panel->GetPropertyGrid(), UiHandleKind::PropertyGrid,
-                                      g_ui_handles[panel_handle].frame) : 0;
+                                      g_ui_handles[panel_handle].frame, panel) : 0;
 }
 
 int32_t ui_property_grid_append_string(uint64_t grid_handle, const char* label,
@@ -987,6 +1056,21 @@ void destroy_all_overlays()
             state.canvas->Refresh(false);
     }
     g_overlays.clear();
+    std::unordered_set<wxWindow*> menu_frames;
+    for (const auto& [binding, entry] : g_menu_bindings)
+    {
+        (void)binding;
+        menu_frames.insert(entry.frame);
+    }
+    for (wxWindow* frame : menu_frames)
+        remove_menu_bindings_for_window(frame);
+    if (g_window_event_filter_installed)
+    {
+        wxEvtHandler::RemoveFilter(&g_window_event_filter);
+        g_window_event_filter_installed = false;
+    }
+    g_window_observers.clear();
+    g_watched_ui_windows.clear();
     g_editor_frames.clear();
     g_ui_handles.clear();
     g_menu_bindings.clear();
@@ -1040,7 +1124,9 @@ int32_t overlay_line(uint64_t, double, double, double, double) { return -1; }
 int32_t overlay_circle(uint64_t, double, double, double) { return -1; }
 int32_t overlay_rectangle(uint64_t, double, double, double, double) { return -1; }
 uint64_t ui_window_get_handle(void*) { return 0; }
-uint64_t ui_window_create(uint64_t, uint32_t, int32_t, const char*, int32_t) { return 0; }
+int32_t ui_window_get_top_level_windows(uint64_t, uint64_t*, uint32_t) { return -1; }
+uint64_t ui_window_observe(uint64_t, KUA_UiWindowEventCallback, void*) { return 0; }
+int32_t ui_window_unobserve(uint64_t) { return -1; }uint64_t ui_window_create(uint64_t, uint32_t, int32_t, const char*, int32_t) { return 0; }
 int32_t ui_window_destroy(uint64_t) { return -1; }
 int32_t ui_window_show(uint64_t, int32_t) { return -1; }
 int32_t ui_window_get_children(uint64_t, uint64_t*, uint32_t) { return -1; }
@@ -1210,6 +1296,9 @@ KUA_HostApi make_host_api()
     host.ui_window_destroy = &ui_window_destroy;
     host.ui_window_show = &ui_window_show;
     host.ui_window_get_children = &ui_window_get_children;
+    host.ui_window_get_top_level_windows = &ui_window_get_top_level_windows;
+    host.ui_window_observe = &ui_window_observe;
+    host.ui_window_unobserve = &ui_window_unobserve;
     host.ui_window_get_class_name = &ui_window_get_class_name;
     host.ui_window_set_text = &ui_window_set_text;
     host.ui_sizer_create = &ui_sizer_create;
@@ -1409,7 +1498,7 @@ public:
             context.canvas = canvas;
             context.view = canvas ? canvas->GetView() : nullptr;
             g_editor_frames[window] = {canvas, static_cast<KIGFX::VIEW*>(context.view)};
-            register_ui_handle(window, UiHandleKind::Window, window);
+            register_ui_window(window, window);
 #endif
             notify_window_created(context);
         }
