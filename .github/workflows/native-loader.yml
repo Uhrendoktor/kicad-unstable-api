@@ -50,7 +50,7 @@ jobs:
             libocct-foundation-dev libocct-ocaf-dev unixodbc-dev zlib1g-dev \
             shared-mime-info libgit2-dev libsecret-1-dev libnng-dev \
             libprotobuf-dev protobuf-compiler swig python3-pip python3-venv \
-            libzstd-dev libspnav-dev libpoppler-glib-dev libsqlite3-dev xvfb xauth
+            libzstd-dev libspnav-dev libpoppler-glib-dev libsqlite3-dev xvfb xauth strace
       - name: Fetch pinned KiCad source
         run: |
           git init /tmp/kicad-source
