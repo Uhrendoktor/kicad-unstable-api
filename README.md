@@ -21,7 +21,7 @@ This is not a stable KiCad C++ ABI. KIFACE's virtual interface and C++ object la
 
 The cross-platform test target remains a synthetic KIFACE host and original module. A separate Linux CI job configures the pinned KiCad source tree and compiles both production proxy faces with the real Eeschema/PCB Editor compile flags, generated headers and wxWidgets configuration from KiCad's `compile_commands.json`. It then builds the matching Eeschema and PCB Editor executables and runs the reversible live smoke test under Xvfb. The probe verifies real editor initialization, non-null frame/canvas/view handles and successful GAL overlay create/style/line/circle/rectangle calls before restoring the original KIFACE modules.
 
-This proves those runtime entry points against the pinned Linux KiCad build. It is not pixel-level screenshot proof of the visible geometry, mouse-event pass-through proof, or proof for Windows/macOS loader policy, signature validation or Gatekeeper.
+The CI smoke currently reaches both built editor executables, but the first live run timed out before the extension initialization callback. The runner now records proxy entry points, original-module loading, extension discovery, wxWidgets traces and a filtered `strace` of KIFACE file opens; it retains these diagnostics as a CI artifact. Treat the runtime gate as unresolved until that run passes. Pixel-level screenshot proof of visible geometry and mouse-event pass-through remain separate gates.
 
 ## Repository map
 
