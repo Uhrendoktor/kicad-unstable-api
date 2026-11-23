@@ -1,5 +1,7 @@
 # KiCad native extension research
 
+Research baseline: KiCad source mirror commit b7066f886375b186ca8fa469de3a6382f6bba400 (verified 2026-11-23). The complete `struct KIFACE` declaration block is byte-for-byte identical to the earlier baseline 2313f118a23a3e3bf4fd04e3625f190f4531a02d: the destructor and all 16 virtual methods remain in the same order. The CI ABI-order guard fetches this immutable header revision and verifies the repository's synthetic projection, proxy overrides, and test dispatch coverage. Re-check against the exact KiCad build before distributing a proxy.
+
 Research baseline: KiCad source mirror commit 2313f118a23a3e3bf4fd04e3625f190f4531a02d. Re-check all details against the exact KiCad build before distributing a proxy.
 
 ## 1. The existing editor-module loader is the bootstrap

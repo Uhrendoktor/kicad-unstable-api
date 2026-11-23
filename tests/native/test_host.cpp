@@ -23,7 +23,8 @@ int main(int argc, char** argv)
     if (argc != 3 && argc != 4)
         fail("usage: test_host <proxy-module> <extension-module> [expected-editor-kind]");
     const uint32_t expected_editor_kind =
-        argc == 4 ? static_cast<uint32_t>(std::stoul(argv[3])) : KUA_EDITOR_SCHEMATIC;
+        argc == 4 ? static_cast<uint32_t>(std::stoul(argv[3]))
+                  : static_cast<uint32_t>(KUA_EDITOR_SCHEMATIC);
     const std::filesystem::path proxy_path(argv[1]), extension_path(argv[2]);
     Module proxy = open_module(proxy_path);
     require(proxy != nullptr, "could not load proxy KIFACE module");
