@@ -49,11 +49,9 @@ def command_arguments(entry: dict[str, Any]) -> list[str]:
 
 def compiler_and_flags(entry: dict[str, Any]) -> tuple[str, list[str]]:
     args = command_arguments(entry)
+    compiler_names = {"c++", "g++", "clang++", "icpx", "icpc"}
     compiler_index = next(
-        (
-            i for i, arg in enumerate(args)
-            if Path(arg).name in {"c++", "g++", "clang++", "icpx", "icpc"}
-        ),
+        (i for i, arg in enumerate(args) if Path(arg).name in compiler_names),
         None,
     )
     if compiler_index is None:
