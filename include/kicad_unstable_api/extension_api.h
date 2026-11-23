@@ -31,6 +31,8 @@ typedef struct KUA_EditorContext
 } KUA_EditorContext;
 
 typedef void (*KUA_GuiCallback)(void* user_data);
+typedef void (*KUA_UiWindowEventCallback)(uint64_t window, uint32_t event_kind,
+                                          void* user_data);
 
 typedef enum KUA_UiWindowKind
 {
@@ -44,6 +46,13 @@ typedef enum KUA_UiWindowKind
     KUA_UI_WINDOW_CHECK_BOX = 8,
     KUA_UI_WINDOW_CHOICE = 9
 } KUA_UiWindowKind;
+
+typedef enum KUA_UiWindowEventKind
+{
+    KUA_UI_WINDOW_SHOWN = 1,
+    KUA_UI_WINDOW_HIDDEN = 2,
+    KUA_UI_WINDOW_DESTROYING = 3
+} KUA_UiWindowEventKind;
 
 typedef enum KUA_UiSizerKind
 {
@@ -128,6 +137,12 @@ typedef struct KUA_HostApi
     int32_t (*ui_window_destroy)(uint64_t window);
     int32_t (*ui_window_show)(uint64_t window, int32_t show);
     int32_t (*ui_window_get_children)(uint64_t parent, uint64_t* handles, uint32_t capacity);
+    /* Top-level windows owned by this editor and lifecycle notifications for native dialogs. */
+    int32_t (*ui_window_get_top_level_windows)(uint64_t editor_frame,
+                                               uint64_t* handles, uint32_t capacity);
+    uint64_t (*ui_window_observe)(uint64_t editor_frame,
+                                  KUA_UiWindowEventCallback callback, void* user_data);
+    int32_t (*ui_window_unobserve)(uint64_t observer);
     int32_t (*ui_window_get_class_name)(uint64_t window, char* buffer, uint32_t capacity);
     int32_t (*ui_window_set_text)(uint64_t window, const char* text);
     uint64_t (*ui_sizer_create)(uint32_t kind, int32_t orientation,
