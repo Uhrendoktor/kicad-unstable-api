@@ -126,13 +126,17 @@ The first stable surface should be capability-oriented, not expose raw KiCad int
 - start/commit/cancel undoable transactions.
 
 ### Docking and shared property system
-- one dockable host panel per editor;
-- pages contributed by plugin IDs;
-- one shared tab strip and theme;
-- contextual providers for selected symbol, footprint, pad, board item or schematic item;
-- provider-owned UI content but host-owned docking, focus, lifecycle and selection notifications.
+- one shared dockable host pane per editor, with one notebook/tab strip;
+- editor-owned native wxDialogs and modeless tool windows, parented to the invoking editor so native window ownership/transient grouping, focus and close lifetime match KiCad;
+- tabs contributed by plugin ID, with priority, object applicability predicate, page factory and lifecycle callbacks;
+- contextual providers for selected symbol, sheet, pin, footprint, pad, track, via, zone, board item or schematic item;
+- selection/document/project notifications and provider refresh/disposal callbacks;
+- provider-owned page content but host-owned docking, floating, theme, focus, window group, persistence and selection context;
+- native custom-field/property CRUD through undoable transactions.
 
-This should initially be a Clippy Workspace/Inspector pane that can host Blocks, JLCPCB and Clippy tabs. A true tab injected into KiCad's built-in Symbol Properties dialog is a separate, unproven hook.
+This should initially be a Clippy Workspace/Inspector pane that can host Blocks, JLCPCB and Clippy tabs. The inspected `PROPERTIES_PANEL` / `SCH_PROPERTIES_PANEL` / `PCB_PROPERTIES_PANEL` are single property grids and expose no third-party page registry. A true tab injected into KiCad's built-in Symbol/Footprint Properties UI needs a KiCad-side provider hook and is a separate, unimplemented integration gate.
+
+The current pinned headers also expose AUI asymmetrically: PCB Editor has a public `GetAuiManager()`; Eeschema's base frame stores its manager in a protected `m_auimgr` with no public getter. A KUA host needs a narrow Eeschema adapter/upstream accessor rather than unsafe member access.
 
 ### Object and placement services
 - selection by UUID and hierarchy path;
@@ -142,6 +146,23 @@ This should initially be a Clippy Workspace/Inspector pane that can host Blocks,
 - interactive move handoff;
 - board interactive move;
 - transactions and undo/redo.
+
+### Window grouping and native UI ownership
+
+All three products currently create plugin-owned UI. Their Tk top-level windows do not become reliable owned windows of the KiCad editor across process boundaries. The native host needs a window manager API for editor-owned dialogs, modeless tool windows, activation/focus, modal scope, close lifecycle, DPI/monitor state and native file dialogs. Use the invoking Eeschema/PCB frame as the default owner. Docked pages must use the editor's existing AUI manager and remain part of the same editor window group when floating.
+
+### Property extension levels
+
+| Extension level | Desired behavior | Current feasibility |
+|---|---|---|
+| KiCad custom fields | Persist supplier, block and component-intent values in native symbol/footprint fields | Existing data model; host CRUD and safe transactions needed |
+| Shared context inspector | Plugin pages update from current selection; one tab host shared by all plugins | KUA workspace and provider registry needed; recommended first |
+| Native built-in property window tabs | Add tabs/providers inside built-in Symbol Properties and Footprint Properties | Not present in inspected `PROPERTIES_PANEL`; needs KiCad-side provider hook |
+| Native property-grid contribution | Add plugin-defined categories/rows to the existing single property grid | Needs an explicit, selection-safe extension hook; do not emulate with repeated rebuilds |
+
+### General API call catalogue
+
+The full proposed method list is in [api-capability-catalog.md](api-capability-catalog.md). It covers lifecycle/session, windows and docking, workspace pages, property providers, documents/objects, schematic and PCB models, selection/navigation, libraries, overlays/coordinates, tools/input, transactions, diagnostics/fixes, ERC/DRC/netlists, background tasks, settings and file dialogs.
 
 ## 6. Priority
 

@@ -27,6 +27,7 @@ Both matching Eeschema and PCB Editor executables are built and run under Xvfb i
 
 - docs/research.md — KiCad loader, exported symbols, and C++ API boundaries.
 - docs/use-case-matrix.md — requirements derived from kicad-blocks, kicad-jlcpcb-interface and kicad-clippy.
+- docs/api-capability-catalog.md — complete project-derived API call catalogue, native windows/window grouping, docking and property-provider design.
 - docs/platform-loader.md — platform mechanics, installation, recovery and validation plan.
 - tests/native/synthetic_kiface.hpp — synthetic KIFACE ABI test double; not a KiCad header projection.
 - include/kicad_unstable_api/extension_api.h — C ABI for privately maintained native extension modules.
