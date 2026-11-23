@@ -74,7 +74,8 @@ if(MSVC)
     target_compile_options(kua_extension_api_c_test PRIVATE /W4)
 else()
     foreach(target kua_original_eeschema kua_original_pcbnew kua_test_extension
-                   kua_proxy_eeschema kua_proxy_pcbnew kua_proxy_test_host)
+                   kua_proxy_eeschema kua_proxy_pcbnew kua_proxy_test_host
+                   kua_real_smoke_extension)
         target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
     endforeach()
     target_compile_options(kua_extension_api_c_test PRIVATE -Wall -Wextra -Wpedantic)
