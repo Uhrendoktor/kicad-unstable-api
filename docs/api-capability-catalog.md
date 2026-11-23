@@ -277,7 +277,8 @@ Do not implement JLCPCB catalogue services, Clippy rules/diagnostics or Blocks l
 | Pane names/configuration and perspective persistence | Each plugin |
 | Menu items, labels, ordering and callbacks | Each plugin |
 | Property rows/pages, validation and persistence | Each plugin |
-| IPC transport, native handle safety, GUI dispatch and native method invocation | KUA |
+| In-process native extension ABI, native handle safety, GUI dispatch and native method invocation | KUA prototype |
+| External IPC/RPC server/client transport and wire conversion | Not implemented |
 
 ## 13. Implementation sequence
 
