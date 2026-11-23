@@ -5,12 +5,21 @@
 #include <string>
 #include <cstdlib>
 
+#if defined(KUA_SMOKE_WITH_WX)
+#include <wx/event.h>
+#include <wx/frame.h>
+#include <wx/menu.h>
+#include <wx/sizer.h>
+#endif
+
 namespace
 {
 const KUA_HostApi* g_host{};
 int g_window_shown_events = 0;
 int g_window_hidden_events = 0;
 int g_window_destroying_events = 0;
+int g_destroy_event_handle_valid = 0;
+uint64_t g_last_destroy_event_handle = 0;
 
 void on_native_window_event(uint64_t window, uint32_t event_kind, void*)
 {
@@ -21,7 +30,14 @@ void on_native_window_event(uint64_t window, uint32_t event_kind, void*)
     else if (event_kind == KUA_UI_WINDOW_HIDDEN)
         ++g_window_hidden_events;
     else if (event_kind == KUA_UI_WINDOW_DESTROYING)
+    {
         ++g_window_destroying_events;
+        g_last_destroy_event_handle = window;
+        char class_name[64]{};
+        if (g_host && g_host->ui_window_get_class_name &&
+            g_host->ui_window_get_class_name(window, class_name, sizeof(class_name)) > 0)
+            ++g_destroy_event_handle_valid;
+    }
 }
 
 void record(const char* event, uint32_t editor_kind, const char* details = "")
@@ -137,6 +153,12 @@ void on_window(const KUA_EditorContext* context)
         ? g_host->ui_window_get_class_name(destroy_probe, destroyed_probe_class,
                                            sizeof(destroyed_probe_class))
         : 0;
+    char expired_destroy_event_class[64]{};
+    const int32_t expired_destroy_event_handle = g_last_destroy_event_handle
+        ? g_host->ui_window_get_class_name(g_last_destroy_event_handle,
+                                           expired_destroy_event_class,
+                                           sizeof(expired_destroy_event_class))
+        : 0;
     const int32_t window_observer_removed = window_observer
         ? g_host->ui_window_unobserve(window_observer)
         : -1;
@@ -159,6 +181,51 @@ void on_window(const KUA_EditorContext* context)
     const int32_t class_read = notebook
         ? g_host->ui_window_get_class_name(notebook, class_name, sizeof(class_name))
         : -1;
+
+    int sizer_replacement_ok = 1;
+    int sizer_owner_destroyed_ok = 1;
+#if defined(KUA_SMOKE_WITH_WX)
+    const uint64_t old_root_sizer = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const uint64_t old_nested_sizer = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const uint64_t old_deep_sizer = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const int32_t old_deep_added = old_nested_sizer && old_deep_sizer
+        ? g_host->ui_sizer_add(old_nested_sizer, old_deep_sizer, 1, wxEXPAND, 0) : -1;
+    const int32_t old_nested_added = old_root_sizer && old_nested_sizer
+        ? g_host->ui_sizer_add(old_root_sizer, old_nested_sizer, 1, wxEXPAND, 0) : -1;
+    const int32_t old_sizer_attached = old_root_sizer
+        ? g_host->ui_window_set_sizer(panel, old_root_sizer) : -1;
+
+    const uint64_t new_root_sizer = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const uint64_t new_nested_sizer = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const uint64_t new_deep_sizer = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const int32_t new_deep_added = new_nested_sizer && new_deep_sizer
+        ? g_host->ui_sizer_add(new_nested_sizer, new_deep_sizer, 1, wxEXPAND, 0) : -1;
+    const int32_t new_nested_added = new_root_sizer && new_nested_sizer
+        ? g_host->ui_sizer_add(new_root_sizer, new_nested_sizer, 1, wxEXPAND, 0) : -1;
+    const int32_t new_sizer_attached = new_root_sizer
+        ? g_host->ui_window_set_sizer(panel, new_root_sizer) : -1;
+    const uint64_t late_sizer = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const int32_t late_sizer_added = new_deep_sizer && late_sizer
+        ? g_host->ui_sizer_add(new_deep_sizer, late_sizer, 1, wxEXPAND, 0) : -1;
+    const int32_t old_root_stale = old_root_sizer
+        ? g_host->ui_sizer_add(old_root_sizer, frame_window, 0, 0, 0) : 0;
+    const int32_t old_nested_stale = old_nested_sizer
+        ? g_host->ui_sizer_add(old_nested_sizer, frame_window, 0, 0, 0) : 0;
+    const int32_t old_deep_stale = old_deep_sizer
+        ? g_host->ui_sizer_add(old_deep_sizer, frame_window, 0, 0, 0) : 0;
+    sizer_replacement_ok = old_deep_added > 0 && old_nested_added > 0 &&
+                           old_sizer_attached > 0 && new_deep_added > 0 &&
+                           new_nested_added > 0 && new_sizer_attached > 0 &&
+                           late_sizer_added > 0 && old_root_stale == -1 &&
+                           old_nested_stale == -1 && old_deep_stale == -1;
+#endif
 
     const uint64_t manager = frame_window ? g_host->ui_aui_get_manager(frame_window) : 0;
     KUA_AuiPaneOptions pane{};
@@ -193,9 +260,27 @@ void on_window(const KUA_EditorContext* context)
     const int32_t menu_attached = menu_item > 0
         ? g_host->ui_menu_bar_append(menu_bar, menu, "KUA Smoke")
         : -1;
+    int menu_callback_count = 0;
     const uint64_t menu_binding = menu_attached > 0
-        ? g_host->ui_menu_bind(frame_window, smoke_menu_id, &on_menu_command, nullptr)
+        ? g_host->ui_menu_bind(frame_window, smoke_menu_id, &on_menu_command,
+                               &menu_callback_count)
         : 0;
+    int menu_dispatch_ok = 1;
+#if defined(KUA_SMOKE_WITH_WX)
+    auto* editor_frame = dynamic_cast<wxFrame*>(static_cast<wxWindow*>(context->frame));
+    wxMenuBar* native_menu_bar = editor_frame ? editor_frame->GetMenuBar() : nullptr;
+    const int native_menu_count = native_menu_bar ? native_menu_bar->GetMenuCount() : 0;
+    wxMenu* source_menu = native_menu_count > 0
+        ? native_menu_bar->GetMenu(native_menu_count - 1) : nullptr;
+    bool menu_event_processed = false;
+    if (editor_frame && source_menu && menu_binding)
+    {
+        wxCommandEvent menu_event(wxEVT_MENU, smoke_menu_id);
+        menu_event.SetEventObject(source_menu);
+        menu_event_processed = editor_frame->GetEventHandler()->ProcessEvent(menu_event);
+    }
+    menu_dispatch_ok = menu_event_processed && menu_callback_count == 1 ? 1 : 0;
+#endif
     const int32_t menu_unbound = menu_binding
         ? g_host->ui_menu_unbind(menu_binding)
         : -1;
@@ -225,37 +310,54 @@ void on_window(const KUA_EditorContext* context)
         }
     }
 
-    char ui_details[256]{};
+    const int32_t panel_destroyed = panel ? g_host->ui_window_destroy(panel) : -1;
+#if defined(KUA_SMOKE_WITH_WX)
+    const int32_t new_root_stale = new_root_sizer
+        ? g_host->ui_sizer_add(new_root_sizer, frame_window, 0, 0, 0) : 0;
+    const int32_t new_nested_stale = new_nested_sizer
+        ? g_host->ui_sizer_add(new_nested_sizer, frame_window, 0, 0, 0) : 0;
+    const int32_t new_deep_stale = new_deep_sizer
+        ? g_host->ui_sizer_add(new_deep_sizer, frame_window, 0, 0, 0) : 0;
+    const int32_t late_sizer_stale = late_sizer
+        ? g_host->ui_sizer_add(late_sizer, frame_window, 0, 0, 0) : 0;
+    sizer_owner_destroyed_ok = panel_destroyed > 0 && new_root_stale == -1 &&
+                               new_nested_stale == -1 && new_deep_stale == -1 &&
+                               late_sizer_stale == -1;
+#endif
+
+    char ui_details[512]{};
     std::snprintf(ui_details, sizeof(ui_details),
-                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|page=%d|count=%d|class=%d|aui=%d|pane=%d|update=%d|detach=%d|menu=%d|bind=%d|unbind=%d|property=%d",
+                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|class=%d|sizer_replace=%d|sizer_destroy=%d|aui=%d|pane=%d|update=%d|detach=%d|menu=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
                   frame_window != 0, top_level_initial, dialog != 0, dialog_shown, dialog_hidden,
                   dialog_enumerated, dialog_destroyed, stale_dialog_handle, destroy_probe != 0,
-                  destroy_probe_result, stale_destroy_probe, window_observer_removed,
+                  destroy_probe_result, stale_destroy_probe, g_destroy_event_handle_valid,
+                  expired_destroy_event_handle, window_observer_removed,
                   g_window_shown_events, g_window_hidden_events, g_window_destroying_events,
-                  panel != 0, page_added, page_count, class_read, manager != 0, pane_added,
-                  aui_updated, pane_detached, menu_attached, menu_binding != 0, menu_unbound,
-                  property_result);
+                  panel != 0, panel_destroyed, page_added, page_count, class_read,
+                  sizer_replacement_ok, sizer_owner_destroyed_ok, manager != 0, pane_added,
+                  aui_updated, pane_detached, menu_attached, menu_binding != 0, menu_dispatch_ok,
+                  menu_callback_count, menu_unbound, property_result);
     const bool ui_ok = frame_window && top_level_initial > 0 && window_observer &&
                        dialog && dialog_shown > 0 && dialog_hidden > 0 && dialog_enumerated &&
                        dialog_destroyed > 0 && stale_dialog_handle == -1 &&
-                       destroy_probe && destroy_probe_result > 0 && stale_destroy_probe == -1 &&
+                       g_destroy_event_handle_valid > 0 && expired_destroy_event_handle == -1 &&
                        window_observer_removed > 0 && g_window_shown_events > 0 &&
                        g_window_hidden_events > 0 && g_window_destroying_events > 0 &&
-                       panel && notebook && page_added > 0 &&
+                       panel && panel_destroyed > 0 && notebook && page_added > 0 &&
                        page_count == 1 && class_read > 0 &&
                        std::string(class_name).find("wxNotebook") != std::string::npos &&
+                       sizer_replacement_ok && sizer_owner_destroyed_ok &&
                        pane_added > 0 && aui_updated > 0 && pane_detached > 0 &&
-                       menu_attached > 0 && menu_binding != 0 && menu_unbound > 0 &&
-                       (!property_grid || property_result > 0);
+                       menu_attached > 0 && menu_binding != 0 && menu_dispatch_ok &&
+                       menu_unbound > 0 && (!property_grid || property_result > 0);
     record(ui_ok ? "native-ui-ready" : "native-ui-failed",
            context->editor_kind, ui_details);
-
-    if (panel)
-        g_host->ui_window_destroy(panel);
 }
 
-void on_menu_command(void*)
+void on_menu_command(void* user_data)
 {
+    if (user_data)
+        ++*static_cast<int*>(user_data);
     record("menu-command", g_host ? g_host->editor_kind : KUA_EDITOR_UNKNOWN);
 }
 
