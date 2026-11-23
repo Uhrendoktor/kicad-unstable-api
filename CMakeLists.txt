@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
-project(kicad_unstable_api VERSION 0.1.0 LANGUAGES CXX)
+project(kicad_unstable_api VERSION 0.1.0 LANGUAGES C CXX)
 include(CTest)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -50,17 +53,26 @@ if(NOT WIN32)
     target_link_libraries(kua_proxy_test_host PRIVATE ${CMAKE_DL_LIBS})
 endif()
 
+# Compile the extension-facing header as C as well as C++. The extension ABI
+# deliberately contains no C++ types and must remain consumable by C plugins.
+add_executable(kua_extension_api_c_test tests/native/test_extension_api_c.c)
+target_include_directories(kua_extension_api_c_test PRIVATE include)
+
 if(MSVC)
     foreach(target kua_original_eeschema kua_original_pcbnew kua_test_extension
                    kua_proxy_eeschema kua_proxy_pcbnew kua_proxy_test_host)
         target_compile_options(${target} PRIVATE /W4 /permissive-)
     endforeach()
+    target_compile_options(kua_extension_api_c_test PRIVATE /W4)
 else()
     foreach(target kua_original_eeschema kua_original_pcbnew kua_test_extension
                    kua_proxy_eeschema kua_proxy_pcbnew kua_proxy_test_host)
         target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
     endforeach()
+    target_compile_options(kua_extension_api_c_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+
+add_test(NAME c_extension_api_header COMMAND kua_extension_api_c_test)
 
 add_test(NAME eeschema_kiface_proxy_forwarding
     COMMAND kua_proxy_test_host
