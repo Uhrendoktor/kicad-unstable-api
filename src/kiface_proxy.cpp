@@ -201,25 +201,7 @@ void remove_menu_bindings_for_window(wxWindow* frame)
     }
 }
 
-void clear_window_observers_for_frame(wxWindow* frame)
-{
-    if (!frame)
-        return;
-
-    for (auto it = g_window_observers.begin(); it != g_window_observers.end();)
-    {
-        if (it->second.frame == frame)
-            it = g_window_observers.erase(it);
-        else
-            ++it;
-    }
-
-    if (g_window_observers.empty() && g_window_event_filter_installed)
-    {
-        wxEvtHandler::RemoveFilter(&g_window_event_filter);
-        g_window_event_filter_installed = false;
-    }
-}
+void clear_window_observers_for_frame(wxWindow* frame);
 
 void invalidate_ui_window(wxWindow* window)
 {
@@ -375,6 +357,26 @@ public:
 };
 
 KuaWindowEventFilter g_window_event_filter;
+
+void clear_window_observers_for_frame(wxWindow* frame)
+{
+    if (!frame)
+        return;
+
+    for (auto it = g_window_observers.begin(); it != g_window_observers.end();)
+    {
+        if (it->second.frame == frame)
+            it = g_window_observers.erase(it);
+        else
+            ++it;
+    }
+
+    if (g_window_observers.empty() && g_window_event_filter_installed)
+    {
+        wxEvtHandler::RemoveFilter(&g_window_event_filter);
+        g_window_event_filter_installed = false;
+    }
+}
 
 void copy_utf8_to_buffer(const wxString& value, char* buffer, uint32_t capacity)
 {
