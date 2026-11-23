@@ -98,6 +98,9 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME python_modloader_unit
     COMMAND ${Python3_EXECUTABLE} -m unittest discover
         -s "${CMAKE_SOURCE_DIR}/tests" -p "test_modloader.py" -v)
+add_test(NAME python_real_kicad_build_tool_unit
+    COMMAND ${Python3_EXECUTABLE} -m unittest discover
+        -s "${CMAKE_SOURCE_DIR}/tests" -p "test_real_kicad_build.py" -v)
 add_test(NAME installed_proxy_roundtrip
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/test_installed_proxy.py"
         --proxy "$<TARGET_FILE:kua_proxy_eeschema>"
