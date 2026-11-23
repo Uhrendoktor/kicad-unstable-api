@@ -155,8 +155,9 @@ The harness is useful for loader mechanics only. It does not prove that a real K
 - The module's `host_build_tag` is set to the KiCad source commit used for compilation. This is provenance metadata, not an independently verified runtime compatibility gate.
 - `tests/native/test_real_smoke_extension.cpp` is a probe extension for a live editor. It records initialization, requires non-null editor frame/canvas/view handles, creates a GAL overlay, sets style, and submits line, circle and rectangle geometry.
 - `tools/smoke_real_kicad.py` can run that probe against matching Linux Eeschema and PCB Editor binaries under X11/Xvfb. It installs both proxies reversibly, verifies the callbacks for each editor, terminates the test processes, and restores the original KIFACE modules.
-- The Linux CI job now builds the matching `eeschema` and `pcbnew` CMake targets from the same pinned KiCad source/build tree, then runs the reversible smoke runner under Xvfb. The runner supports KiCad's separate Eeschema and PCB Editor build directories, installs the corresponding proxy in each directory, verifies initialize/window/overlay-ready callbacks for editor kinds 1 and 2, terminates each editor, and restores both original KIFACE modules.
-- The smoke verifies that the real editor returns non-null frame/canvas/view handles and that the host's GAL overlay create/style/line/circle/rectangle calls succeed. It does not capture pixels or synthesize clicks, so visual rendering and mouse pass-through remain unverified.
+- The Linux CI job builds the matching `eeschema` and `pcbnew` CMake targets from the same pinned KiCad source/build tree and runs the reversible smoke runner under Xvfb. The first attempt built both applications and proxies but timed out before the extension initialization callback in Eeschema; the runner restored both original KIFACE modules.
+- The runner now records proxy entry, preserved-original loading, extension search path, wxWidgets trace output, and a `strace` file-open trace. Diagnostics are retained as a CI artifact after failures. The runtime gate remains unresolved until both editors emit initialize/window/overlay-ready events.
+- Once it passes, the smoke proves non-null frame/canvas/view handles and successful GAL overlay create/style/line/circle/rectangle calls. It does not capture pixels or synthesize clicks, so visual rendering and mouse pass-through remain unverified.
 
 
 ### Required platform test matrix
@@ -167,9 +168,9 @@ The harness is useful for loader mechanics only. It does not prove that a real K
 | Load proxy in synthetic host | CI | CI | CI |
 | Forward original KIFACE in synthetic host | CI | CI | CI |
 | Install/restore hash-verified fake modules | CI | CI | CI |
-| Real KiCad Eeschema launch and close | Manual/integration runner | Manual/integration runner | CI (pinned build + Xvfb smoke) |
-| Real KiCad PCB Editor launch and close | Manual/integration runner | Manual/integration runner | CI (pinned build + Xvfb smoke) |
-| GAL create/style/primitive API calls | GUI test | GUI test | CI (live API smoke) |
+| Real KiCad Eeschema launch and close | Manual/integration runner | Manual/integration runner | CI attempted (runtime gate failing) |
+| Real KiCad PCB Editor launch and close | Manual/integration runner | Manual/integration runner | CI attempted (pending after Eeschema) |
+| GAL create/style/primitive API calls | GUI test | GUI test | CI attempted (no callback yet) |
 | Pixel-level GAL rendering and mouse pass-through | GUI test | GUI test | GUI test |
 | Native placement/snap/undo/cancel | GUI test | GUI test | GUI test |
 | AUI workspace + provider switching | GUI test | GUI test | GUI test |
@@ -197,9 +198,9 @@ The harness is useful for loader mechanics only. It does not prove that a real K
 5. The host scans a shared extension directory but has no manifest, dependency ordering, capability negotiation or per-extension enable/disable settings yet.
 6. The frame callback filters to the primary `FRAME_SCH` / `FRAME_PCB_EDITOR` window and now supplies borrowed opaque frame, canvas and GAL view handles. Canvas/view discovery uses `EDA_DRAW_FRAME::GetCanvas()` and `EDA_DRAW_PANEL_GAL::GetView()` from the exact headers; document and selection services remain unimplemented.
 7. The installer has no platform privilege-elevation flow and no integration with the running IPC add-on. It must schedule after *all* host processes exit and confirm executable identity/PID to avoid PID-reuse races.
-8. CI tests both synthetic editor faces and the joint install/restore workflow, compiles both production proxy faces against pinned KiCad headers on Linux, builds both pinned editor executables, and runs the reversible live GAL API smoke under Xvfb.
+8. CI tests both synthetic editor faces and the joint install/restore workflow, compiles both production proxy faces against pinned KiCad headers on Linux, and builds both pinned editor executables. The live GAL API smoke is automated under Xvfb but is currently failing before the extension initialization callback; diagnostic tracing has been added.
 9. The deferred-helper zombie-process wait bug is fixed; the current CI matrix exercises the helper on Windows, macOS and Linux.
-10. The real-editor smoke runner is Linux-only and runs in CI against the pinned source build. Pixel-level rendering, mouse pass-through, Windows production builds/signature policy and macOS production builds/Gatekeeper tests are not in CI.
+10. The real-editor smoke runner is Linux-only and runs in CI against the pinned source build; the first runtime attempt failed before extension initialization and has not yet passed. Pixel-level rendering, mouse pass-through, Windows production builds/signature policy and macOS production builds/Gatekeeper tests are not in CI.
 
 ## Delivery order
 
