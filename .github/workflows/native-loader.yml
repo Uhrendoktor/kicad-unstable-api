@@ -88,13 +88,16 @@ jobs:
             --smoke-extension build/smoke-extension/kua_real_smoke_extension.so \
             --eeschema /tmp/kicad-build/eeschema/eeschema \
             --pcbnew /tmp/kicad-build/pcbnew/pcbnew \
-            --timeout 90
+            --diagnostics-dir build/real-kicad-diagnostics \
+            --timeout 180
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: real-kicad-linux-proxies
+          name: real-kicad-linux-proxies-and-diagnostics
           path: |
             build/real-kicad/_eeschema.kiface
             build/real-kicad/_pcbnew.kiface
             build/smoke-extension/kua_real_smoke_extension.so
-          if-no-files-found: error
+            build/real-kicad-diagnostics/
+          if-no-files-found: warn
           retention-days: 7
