@@ -4,7 +4,7 @@ This document turns the use-case matrix into an implementation and verification 
 
 ## Design rule
 
-Use one in-process native host per editor face, with independently versioned extension modules and a stable C ABI between the host and those modules. The KiCad-specific C++ adapter is compiled against one exact KiCad source/build fingerprint. Rust/Python application logic stays outside the native ABI and communicates through the extension's own service boundary.
+KUA extends KiCad's IPC surface with bindings to existing native KiCad and wxWidgets behavior. The per-build C++ adapter maps IPC calls to native methods/events. Plugins retain their own UI composition, workflows, data models, metadata, persistence and business logic. KUA provides transport, conversion, safe handles, GUI-thread dispatch and version-specific native invocation.
 
 ```text
 KiCad starts normally
@@ -20,9 +20,9 @@ KiCad starts normally
 
 Do not make every extension depend directly on KiCad's C++ ABI. Only the per-build adapter should do that. Expose capability-oriented operations and opaque handles through KUA.
 
-## Shared native services required by the three projects
+## Native KiCad behavior required by the three projects
 
-| Service | Shared host responsibility | Blocks | JLCPCB | Clippy |
+| Native behavior | Binding required in KUA | Blocks caller | JLCPCB caller | Clippy caller |
 |---|---|---|---|---|
 | Editor lifecycle | Start/end/reset, frame-created/closed, active document and project change | Required | Required | Required |
 | Document identity | Editor kind, project/document ID, schematic sheet path or board UUID | Hierarchical block instance identity | Resolve symbol instances across sheets | Diagnostic scope and stable targets |
@@ -32,8 +32,10 @@ Do not make every extension depend directly on KiCad's C++ ABI. Only the per-bui
 | Input/tool routing | Passive observation, hover, selective event consumption, keyboard focus | Placement affordances | Optional inline add/replace affordances | Hover explanations and clickable fix markers |
 | Native placement | Create object, start interactive move, snap, commit/cancel | Place facade and PCB layout | Add part at cursor | Proposed move/geometry fixes |
 | Transactions | Undoable schematic/board commits and rollback | Instance changes and placement | Add/update catalogue fields | Apply fixes as one transaction |
-| Docking | One shared AUI workspace per editor | Library/instance/layout tabs | Catalogue/preview tabs | Findings/explanation/fix tabs |
-| Context properties | Provider registry keyed by selection type | Block role/profile/variant/parameters | LCSC/MPN/manufacturer/package | Component intent and lint metadata |
+| Docking | wxAuiManager GetManager/AddPane/DetachPane/Update/perspective | Plugin-owned panes | Plugin-owned panes | Plugin-owned panes |
+| Native menus | wxMenuBar/wxMenu insertion and command events | Plugin menu entries | Plugin menu entries | Plugin menu entries |
+| Properties | wxPropertyGrid rows and wxNotebook pages in existing dialogs | Plugin-owned rows/pages | Plugin-owned rows/pages | Plugin-owned rows/pages |
+| Windows | wxWindow/wxDialog/wxFrame create and parent | Plugin-owned windows | Plugin-owned windows | Plugin-owned windows |
 | Preview | Reusable symbol/footprint/3D preview surfaces | Facade and implementation preview | Symbol, footprint, STEP/3D | Geometry and fix preview |
 | Project settings | Project-local configuration and metadata persistence | Block catalogs and profiles | Supplier configuration | Rule profile and component intent |
 | Background work | Thread-safe dispatch to Python/Rust; GUI calls return to main thread | Library sync/build | Pricing/stock/catalogue queries | Lint/ERC/DRC and fix planning |
@@ -86,25 +88,20 @@ The C ABI should expose these groups using versioned structs, fixed-width scalar
 - Expose begin/preview/commit/cancel, with one undo item and explicit failure results.
 - Fix proposals must include document fingerprint, object UUIDs, precondition hashes and expected post-edit validation. Re-resolve UUIDs immediately before applying.
 
-### 6. Shared workspace and property-provider registry
-- One host-owned wxAui pane per editor, implemented as a Clippy Workspace/Inspector.
-- Host owns docking, tab strip, selection context, theme, visibility, focus and lifecycle.
-- Extensions register pages with: extension ID, page ID, title, supported object kinds, selection predicate, create/update/destroy callbacks, preferred order and optional icon.
-- A page receives a typed selection context and opaque host services; the extension owns only its page content.
-- Initial tabs:
-  - Blocks: Library, Facade/Preview, Instance, Layout, Publish.
-  - JLCPCB: Overview, Catalogue, Symbol, Footprint, 3D.
-  - Clippy: Findings, Explanation, Fix Preview, Component Intent.
-- Context providers are separate from static workspace pages. For a selected symbol, all applicable providers may contribute fields or tabs.
-- Do not promise insertion into KiCad's built-in Symbol Properties dialog. Its current property panel is a single property-grid implementation, not an extensible third-party tab registry. A sibling/tabified AUI pane is the first realistic target.
+### 6. Native wxWidgets bindings: windows, menus, notebooks and AUI
+- Bind wxWindow/wxDialog/wxFrame create, parent/owner, child traversal, visibility, focus, geometry, events and wxSizer composition.
+- Bind wxMenuBar/wxMenu Append/Insert/Remove/Enable/Check and native event callbacks.
+- Bind wxAuiManager::GetManager/AddPane/InsertPane/DetachPane/Update and perspective methods; each plugin creates/configures its own panes.
+- Bind wxNotebook AddPage/InsertPage/RemovePage/DeletePage and child class inspection.
+- The modal Symbol Properties and Footprint Properties dialogs already contain wxNotebook controls; plugins can append their own pages.
+- Bind EDA_DRAW_FRAME::GetPropertiesPanel, PROPERTIES_PANEL::GetPropertyGrid and wxPropertyGrid methods for the persistent side panel.
+- KUA does not create a shared workspace, page registry, menu manager, property-provider registry or common inspector. Plugins own their UI controls and state.
 
-### 7. Property metadata and persistence
-- Keep plugin metadata namespaced by extension and versioned.
-- Prefer KiCad custom properties or project-local metadata keyed by schematic sheet path + symbol UUID; avoid using reference designators as stable IDs.
-- Blocks page: block UUID, implementation, variant, profile and typed parameters.
-- JLCPCB page: LCSC ID, MPN, manufacturer, supplier/package mapping and cached catalogue status.
-- Clippy page: component kind/role/function/rationale, target IC/pin, capacitor target/return terminals, return net, cluster and distance limits.
-- Property writes must use native commits and preserve unrelated fields/library identity.
+### 7. Native property/object bindings
+- Expose existing KiCad symbol/footprint field accessors, wxPropertyGrid operations and native notebook methods.
+- Expose native SCH_COMMIT/BOARD_COMMIT operations and object updates.
+- Preserve unrelated user fields and library identity through existing native update APIs.
+- Blocks/JLCPCB/Clippy define their own metadata schemas, interpretation, storage and conflict policy.
 
 ## Project-specific acceptance scenarios
 
@@ -196,7 +193,7 @@ The harness is useful for loader mechanics only. It does not prove that a real K
 1. The synthetic KIFACE header remains a test double. Linux CI compiles the production proxy against headers and compile flags generated by the pinned KiCad source build and links the real `libkigal` dependency; Windows and macOS production-header compiles remain outstanding.
 2. Linux CI also builds the pinned Eeschema and PCB Editor executables and runs the live API smoke. The proxy is compiled using the exact KiCad editor compile flags and links only the shared GAL library it directly calls; it does not link the editor implementation. The smoke's RUNPATH is specific to the KiCad build-tree directory layout; distribution/package-specific runtime paths still need platform integration work.
 3. The ABI tag is reported to extensions but is not independently verified against the running KiCad executable; do not treat it as a runtime compatibility gate.
-4. The host API includes the first GAL overlay operations; object model, tools, placement, docking, selection and property-provider services are not implemented.
+4. The current KUA API includes initial GAL overlay operations; native window/control, menu, notebook, AUI, property-grid, object, selection and tool bindings remain to be exposed.
 5. The host scans a shared extension directory but has no manifest, dependency ordering, capability negotiation or per-extension enable/disable settings yet.
 6. The frame callback filters to the primary `FRAME_SCH` / `FRAME_PCB_EDITOR` window and now supplies borrowed opaque frame, canvas and GAL view handles. Canvas/view discovery uses `EDA_DRAW_FRAME::GetCanvas()` and `EDA_DRAW_PANEL_GAL::GetView()` from the exact headers; document and selection services remain unimplemented.
 7. The installer has no platform privilege-elevation flow and no integration with the running IPC add-on. It must schedule after *all* host processes exit and confirm executable identity/PID to avoid PID-reuse races.
@@ -216,14 +213,14 @@ P1 — first real native editor integration:
 5. Build real Eeschema and PCB Editor proxies against an exact KiCad build. **Completed for the pinned Linux build.**
 6. Discover frame/canvas/view and exercise transient GAL overlay operations. **Completed in both editors in the pinned Linux smoke test; pixel-level rendering is not yet verified.**
 7. Prove passive pass-through, hover and one interactive tool event.
-8. Add one shared AUI pane and a two-provider tab registry.
+8. Bind wxWindow, wxMenuBar/wxMenu, wxAuiManager, wxNotebook and wxPropertyGrid so plugins can compose their own UI.
 
 P2 — core workflows:
 9. Implement schematic native move handoff and verify snap/undo/cancel.
-10. Implement shared selection/document identity and contextual property providers.
-11. Port the three plugin pages and board-side overlay/placement adapter.
+10. Bind native selection/document/object access and existing Properties panel/grid methods.
+11. Verify the three plugins can invoke the exposed native calls; do not port their UI/features into KUA.
 
 P3 — production hardening:
-12. Add fix transaction planner and post-edit verification.
+12. Expose native commit and validation/report calls; keep fix planning and post-edit policy in Clippy.
 13. Expand version/build matrix and automated real-GUI smoke tests.
 14. Add platform installer UX, diagnostics, rollback and recovery documentation.

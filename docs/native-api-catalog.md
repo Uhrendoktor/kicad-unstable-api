@@ -81,28 +81,17 @@ Sources:
 - https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/eeschema/tools/sch_actions.h
 - https://github.com/Uhrendoktor/kicad-blocks/blob/main/docs/upstream/kicad-schematic-interactive-move-proposal.md
 
-## Dockable windows and shared property tabs
+## Native UI bindings: windows, menus, docking and properties
 
-Both editors use a wxAuiManager-backed frame layout. In the inspected pinned headers PCB Editor publicly exposes `PCB_BASE_EDIT_FRAME::GetAuiManager()`; Eeschema inherits `m_auimgr` from `EDA_BASE_FRAME`, where it is protected and no public getter is declared. The Eeschema bridge therefore needs a small version-specific accessor or an upstream public getter. Do not use member-offset hacks or unsafe casts.
+Plugins create and own their native windows, controls, menu entries, notebook pages and AUI panes. KUA exposes existing wxWidgets/KiCad methods; it does not create a common workspace or decide plugin UI.
 
-The native `PROPERTIES_PANEL` is a wxPanel with one wxPropertyGrid and selection-aware rebuilds. `SCH_PROPERTIES_PANEL` and `PCB_PROPERTIES_PANEL` customize property construction and change handling, but no public AddPage/provider registry was found.
+- **Windows:** wxWindow/wxDialog/wxFrame creation, parenting/ownership, visibility, focus, geometry, child traversal/class inspection, events and wxSizer layout.
+- **Menus:** wxFrame::GetMenuBar and wxMenuBar/wxMenu Append/Insert/Remove/Replace, submenu, enable/check/label and event binding.
+- **Docking:** wxAuiManager::GetManager/GetPane/AddPane/InsertPane/DetachPane/Update/SavePerspective/LoadPerspective and wxAuiPaneInfo.
+- **Notebook pages:** child traversal plus wxNotebook AddPage/InsertPage/RemovePage/DeletePage/GetPageCount/SetSelection.
+- **Side Properties:** EDA_DRAW_FRAME::GetPropertiesPanel and PROPERTIES_PANEL::GetPropertyGrid; wxPropertyGrid Append/Insert/Delete/Clear/value/attribute/event operations.
 
-Recommended initial architecture:
-- One KUA Workspace pane per editor, attached to the editor's AUI manager.
-- One host-owned wxAuiNotebook/tab strip inside the pane.
-- Plugins register page IDs/titles, object applicability predicates and page factories.
-- The host manages docking, floating, tab navigation, theme, focus, context propagation, layout persistence and teardown.
-- Blocks contributes Library/Instance/Implementation/PCB Layout/Publish; JLCPCB contributes Overview/Catalogue/Symbol/Footprint/3D; Clippy contributes Findings/Explanation/Related Objects/Fix Preview/Component Intent.
-- Pages receive typed KUA object/document handles, not raw KiCad pointers, and use host transactions for edits.
-
-A sibling/tabified pane beside the native Properties pane is feasible first. A tab inside KiCad's built-in Symbol/Footprint Properties window is a separate KiCad API gap: it needs an explicit property-provider/page extension hook in the native property-panel code. Ordinary custom symbol fields are supported data fields, but that is not the same as third-party UI tabs.
-
-Sources:
-- https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/common/widgets/properties_panel.h
-- https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/eeschema/widgets/sch_properties_panel.h
-- https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/pcbnew/widgets/pcb_properties_panel.h
-- https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/eeschema/sch_edit_frame.cpp
-- https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/pcbnew/pcb_edit_frame.cpp
+The modal Eeschema Symbol Properties and PCB Footprint Properties dialogs each contain a wxNotebook child that can accept a plugin-owned page. The persistent side Properties panel is a single wxPropertyGrid, not a notebook. See [api-capability-catalog.md](api-capability-catalog.md) for detailed calls and source evidence.
 
 ## Other shared native services
 
@@ -113,8 +102,8 @@ Sources:
 | Selection | Editor's selection tool and KIID/UUID mapping; sheet path is part of schematic identity |
 | Navigation | Native focus/cross-probe helpers, then selection |
 | Tool registration | Existing TOOL_MANAGER/ACTION_MANAGER per editor |
-| Docking | wxAuiManager + one shared workspace pane |
-| Context properties | Shared provider tabs; write KiCad fields/custom properties using commits |
+| Docking | Native wxAuiManager methods; plugin owns pane/window |
+| Properties | Native wxPropertyGrid rows and wxNotebook pages; plugin owns values/pages |
 | Project configuration | KiCad project/settings APIs and project-local profile files |
 | Fixes | SCH_COMMIT/BOARD_COMMIT, native operations, commit/rollback/re-run checks |
 | DRC/ ERC | Existing native engines and IPC/CLI reports; do not duplicate KiCad's validators |
@@ -148,7 +137,7 @@ Sources:
 
 The current Python/Tk companion plugins cannot reliably establish native ownership across process boundaries. The host should create wxWidgets dialogs and modeless tool windows inside KiCad and parent them to the invoking editor. This allows the platform adapter to establish normal owner/transient grouping, focus, activation and close lifetime. See the complete method catalogue in [api-capability-catalog.md](api-capability-catalog.md).
 
-The initial API should support editor-owned dialogs, modeless tool windows, modal scope, show/hide/raise/focus, close callbacks, DPI/display information, per-editor geometry persistence and native file dialogs. Docked pages should be child controls of the shared AUI workspace; floating panes remain owned by the same editor. Do not reparent a window in another process or guess native window IDs.
+Expose existing wxDialog/wxFrame/wxWindow create/parent/show/hide/raise/focus/close/event methods and native file dialogs. A plugin creates and manages its own dialogs and child controls; for docking, the plugin adds its own window to the existing AUI manager. Do not reparent a window in another process or guess native window IDs.
 
 ## Current frame context handles
 

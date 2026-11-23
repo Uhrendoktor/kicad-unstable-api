@@ -11,9 +11,9 @@ This matrix was derived from the current main branches of:
 |---|---|---|---|
 | Schematic object model | Facade symbols, hierarchy, pins, sheet paths, UUID selection | Symbol instances, pin maps, fields, hierarchy | Rule targets, symbol/pin/wire geometry, sheet paths |
 | PCB object model | Import and position stored layouts, groups and footprints | Footprint previews and optional 3D assets | Pads, footprints, tracks, vias, zones, DRC targets |
-| Dockable workspace | Library browser, implementation/variant, configuration, publish | Component overview and catalogue workspace | Diagnostics, rule filters, fix details |
-| Shared tab host | Library / instance / layout / publishing tabs | Catalogue / symbol / footprint / 3D tabs | Findings / explanation / fix preview |
-| Contextual property pages | Block instance metadata and variant selector | LCSC, MPN, package and supplier data | Component intent, role and lint-specific metadata |
+| Plugin-owned native UI | Plugin creates its own library/configuration/preview windows and panels | Plugin creates its own overview/catalogue/preview UI | Plugin creates its own findings/rule/fix UI |
+| Native UI bindings | wxWindow/wxNotebook/wxAuiManager/wxMenuBar calls let plugin create own tabs, panes and menus | Same native UI bindings | Same native UI bindings |
+| Native property integration | Plugin adds own rows/pages to native property controls | Plugin adds supplier rows/pages | Plugin adds component-intent rows/pages |
 | Cursor-attached schematic placement | Required for Place Block; temporary center placement is current fallback | Required for Add Component; current fallback is page-center placement | Useful for fix previews and suggested geometry |
 | Native interactive move | Needs Schematic equivalent of Board.interactive_move | Needs same Eeschema move handoff | Needed for safe position/layout fixes |
 | Grid/snap integration | Must use native schematic snap and move tools | Must use native schematic snap and move tools | Highlights and proposed positions must share KiCad coordinates |
@@ -98,7 +98,7 @@ Relevant sources:
 - https://github.com/Uhrendoktor/kicad-clippy/blob/main/src/core/diagnostic.rs
 - https://github.com/Uhrendoktor/kicad-clippy/blob/main/docs/roadmap.md
 
-## 5. Shared native API shape
+## 5. Native API bindings exposed to plugins
 
 The first stable surface should be capability-oriented, not expose raw KiCad internals everywhere.
 
@@ -125,18 +125,15 @@ The first stable surface should be capability-oriented, not expose raw KiCad int
 - native tool/action invocation;
 - start/commit/cancel undoable transactions.
 
-### Docking and shared property system
-- one shared dockable host pane per editor, with one notebook/tab strip;
-- editor-owned native wxDialogs and modeless tool windows, parented to the invoking editor so native window ownership/transient grouping, focus and close lifetime match KiCad;
-- tabs contributed by plugin ID, with priority, object applicability predicate, page factory and lifecycle callbacks;
-- contextual providers for selected symbol, sheet, pin, footprint, pad, track, via, zone, board item or schematic item;
-- selection/document/project notifications and provider refresh/disposal callbacks;
-- provider-owned page content but host-owned docking, floating, theme, focus, window group, persistence and selection context;
-- native custom-field/property CRUD through undoable transactions.
+### Native wxWidgets UI bindings
+- wxWindow/wxDialog/wxFrame create/parent/child traversal/size/event/sizer methods;
+- wxMenuBar/wxMenu insert/remove and native command-event binding;
+- wxAuiManager methods so each plugin docks its own windows;
+- wxNotebook page methods so each plugin appends pages to existing native dialogs;
+- EDA_DRAW_FRAME::GetPropertiesPanel, PROPERTIES_PANEL::GetPropertyGrid and native wxPropertyGrid operations.
+- Plugins own their controls, contents, page/menu/pane lifetime and persistence; KUA does not own a shared workspace.
 
-This should initially be a Clippy Workspace/Inspector pane that can host Blocks, JLCPCB and Clippy tabs. The inspected `PROPERTIES_PANEL` / `SCH_PROPERTIES_PANEL` / `PCB_PROPERTIES_PANEL` are single property grids and expose no third-party page registry. A true tab injected into KiCad's built-in Symbol/Footprint Properties UI needs a KiCad-side provider hook and is a separate, unimplemented integration gate.
-
-The current pinned headers also expose AUI asymmetrically: PCB Editor has a public `GetAuiManager()`; Eeschema's base frame stores its manager in a protected `m_auimgr` with no public getter. A KUA host needs a narrow Eeschema adapter/upstream accessor rather than unsafe member access.
+Both modal Symbol Properties and Footprint Properties dialogs have wxNotebook children. The persistent side Properties panel has one wxPropertyGrid. These are different native insertion points. See [api-capability-catalog.md](api-capability-catalog.md).
 
 ### Object and placement services
 - selection by UUID and hierarchy path;
@@ -149,7 +146,7 @@ The current pinned headers also expose AUI asymmetrically: PCB Editor has a publ
 
 ### Window grouping and native UI ownership
 
-All three products currently create plugin-owned UI. Their Tk top-level windows do not become reliable owned windows of the KiCad editor across process boundaries. The native host needs a window manager API for editor-owned dialogs, modeless tool windows, activation/focus, modal scope, close lifecycle, DPI/monitor state and native file dialogs. Use the invoking Eeschema/PCB frame as the default owner. Docked pages must use the editor's existing AUI manager and remain part of the same editor window group when floating.
+Each plugin needs native windows. Bind wxDialog/wxFrame/wxWindow creation and parent/owner semantics so plugins create their own windows parented to the invoking editor. Bind wxAuiManager methods so each plugin docks its own panes. KUA does not create/manage panes for plugins.
 
 ### Property extension levels
 
@@ -157,8 +154,8 @@ All three products currently create plugin-owned UI. Their Tk top-level windows 
 |---|---|---|
 | KiCad custom fields | Persist supplier, block and component-intent values in native symbol/footprint fields | Existing data model; host CRUD and safe transactions needed |
 | Shared context inspector | Plugin pages update from current selection; one tab host shared by all plugins | KUA workspace and provider registry needed; recommended first |
-| Native built-in property window tabs | Add tabs/providers inside built-in Symbol Properties and Footprint Properties | Not present in inspected `PROPERTIES_PANEL`; needs KiCad-side provider hook |
-| Native property-grid contribution | Add plugin-defined categories/rows to the existing single property grid | Needs an explicit, selection-safe extension hook; do not emulate with repeated rebuilds |
+| Modal Symbol/Footprint Properties tabs | Add a plugin page to the existing native dialog notebook | Both dialogs already contain wxNotebook children; bind child traversal + wxNotebook AddPage/InsertPage |
+| Persistent side Properties panel | Add plugin-owned rows/categories to wxPropertyGrid | Existing GetPropertiesPanel/GetPropertyGrid and wxPropertyGrid APIs; bind these methods |
 
 ### General API call catalogue
 
@@ -178,7 +175,7 @@ P1:
 7. Shared dockable pane and tab-provider registry.
 
 P2:
-8. Selected-object property provider registry.
+8. Native window/menu/AUI/notebook/property-grid bindings, with plugin-owned UI and page lifecycle.
 9. Block, JLCPCB and Clippy pages.
 10. Fix planner, preview and apply.
 11. Full KiCad API surface inventory and generated export/symbol map per release.

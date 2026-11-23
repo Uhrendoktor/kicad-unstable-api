@@ -2,7 +2,7 @@
 
 A research prototype for a private, cross-platform native extension runtime for stock KiCad installations.
 
-The target is to let independently maintained plugins execute inside Eeschema and PCB Editor, use KiCad's in-process C++ APIs, and provide native capabilities that the IPC add-on API does not currently expose: transient GAL overlays, cursor-attached placement, editor-owned dockable panels, shared property tabs, and tool/event integration.
+The goal is to extend KiCad's IPC surface with bindings to existing native KiCad and wxWidgets behavior that plugins need but cannot currently call: GAL overlays, native tool/move actions, wxWindow/dialog creation and ownership, menu insertion, AUI docking, notebook-page insertion, property-grid operations, selection and document/object access. Plugins such as Blocks, JLCPCB Interface and Clippy keep their own UI, workflows, data models and business logic; KUA exposes native calls only.
 
 ## Proposed bootstrap
 
@@ -27,7 +27,7 @@ Both matching Eeschema and PCB Editor executables are built and run under Xvfb i
 
 - docs/research.md — KiCad loader, exported symbols, and C++ API boundaries.
 - docs/use-case-matrix.md — requirements derived from kicad-blocks, kicad-jlcpcb-interface and kicad-clippy.
-- docs/api-capability-catalog.md — complete project-derived API call catalogue, native windows/window grouping, docking and property-provider design.
+- docs/api-capability-catalog.md — native IPC binding catalogue for windows, menus, AUI docking, notebooks, Properties grids, objects and tools; plugin behavior stays in plugins.
 - docs/platform-loader.md — platform mechanics, installation, recovery and validation plan.
 - tests/native/synthetic_kiface.hpp — synthetic KIFACE ABI test double; not a KiCad header projection.
 - include/kicad_unstable_api/extension_api.h — C ABI for privately maintained native extension modules.
