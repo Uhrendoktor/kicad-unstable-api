@@ -15,9 +15,12 @@ _Static_assert(offsetof(KUA_HostApi, ui_window_create) >
 _Static_assert(offsetof(KUA_HostApi, ui_aui_add_pane) >
                    offsetof(KUA_HostApi, ui_menu_unbind),
                "AUI operations must follow menu operations");
+_Static_assert(offsetof(KUA_HostApi, ui_window_get_top_level_windows) >
+                   offsetof(KUA_HostApi, ui_property_grid_delete),
+               "Window lifecycle calls must append after the existing host ABI");
 _Static_assert(offsetof(KUA_HostApi, ui_window_observe) >
-                   offsetof(KUA_HostApi, ui_window_get_children),
-               "Window lifecycle observers must follow child enumeration");
+                   offsetof(KUA_HostApi, ui_window_get_top_level_windows),
+               "Window observer registration must follow enumeration");
 _Static_assert(offsetof(KUA_HostApi, ui_window_unobserve) >
                    offsetof(KUA_HostApi, ui_window_observe),
                "Window observer teardown must follow observer registration");
