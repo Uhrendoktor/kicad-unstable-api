@@ -593,6 +593,77 @@ uint64_t ui_sizer_create(uint32_t kind, int32_t orientation,
     return register_ui_handle(sizer, UiHandleKind::Sizer, nullptr);
 }
 
+bool ui_sizer_contains(wxSizer* root, wxSizer* target)
+{
+    if (!root || !target)
+        return false;
+    if (root == target)
+        return true;
+
+    const wxSizerItemList& children = root->GetChildren();
+    for (wxSizerItemList::compatibility_iterator node = children.GetFirst();
+         node; node = node->GetNext())
+    {
+        wxSizerItem* item = node->GetData();
+        if (item && item->IsSizer() && ui_sizer_contains(item->GetSizer(), target))
+            return true;
+    }
+    return false;
+}
+
+void set_sizer_owner_recursive(wxSizer* sizer, wxWindow* owner_window, void* frame)
+{
+    if (!sizer)
+        return;
+
+    for (auto& [handle, entry] : g_ui_handles)
+    {
+        (void)handle;
+        if (entry.kind == UiHandleKind::Sizer && entry.pointer == sizer)
+        {
+            entry.owner_window = owner_window;
+            entry.frame = frame;
+            break;
+        }
+    }
+
+    const wxSizerItemList& children = sizer->GetChildren();
+    for (wxSizerItemList::compatibility_iterator node = children.GetFirst();
+         node; node = node->GetNext())
+    {
+        wxSizerItem* item = node->GetData();
+        if (item && item->IsSizer())
+            set_sizer_owner_recursive(item->GetSizer(), owner_window, frame);
+    }
+}
+
+void forget_ui_sizer_tree_handles(wxSizer* sizer)
+{
+    if (!sizer)
+        return;
+
+    std::vector<wxSizer*> child_sizers;
+    const wxSizerItemList& children = sizer->GetChildren();
+    for (wxSizerItemList::compatibility_iterator node = children.GetFirst();
+         node; node = node->GetNext())
+    {
+        wxSizerItem* item = node->GetData();
+        if (item && item->IsSizer())
+            child_sizers.push_back(item->GetSizer());
+    }
+
+    for (wxSizer* child : child_sizers)
+        forget_ui_sizer_tree_handles(child);
+
+    for (auto it = g_ui_handles.begin(); it != g_ui_handles.end();)
+    {
+        if (it->second.kind == UiHandleKind::Sizer && it->second.pointer == sizer)
+            it = g_ui_handles.erase(it);
+        else
+            ++it;
+    }
+}
+
 int32_t ui_sizer_add(uint64_t sizer_handle, uint64_t child_handle,
                      int32_t proportion, int32_t flags, int32_t border)
 {
@@ -610,11 +681,27 @@ int32_t ui_sizer_add(uint64_t sizer_handle, uint64_t child_handle,
 
     auto* sizer = static_cast<wxSizer*>(sizer_entry->pointer);
     if (child_entry->kind == UiHandleKind::Window)
+    {
         sizer->Add(static_cast<wxWindow*>(child_entry->pointer), proportion, flags, border);
+    }
     else if (child_entry->kind == UiHandleKind::Sizer)
-        sizer->Add(static_cast<wxSizer*>(child_entry->pointer), proportion, flags, border);
+    {
+        auto* child_sizer = static_cast<wxSizer*>(child_entry->pointer);
+        // Do not let a sizer already owned by a window be attached twice.
+        if (child_entry->owner_window || ui_sizer_contains(sizer, child_sizer) ||
+            ui_sizer_contains(child_sizer, sizer))
+            return -1;
+
+        sizer->Add(child_sizer, proportion, flags, border);
+        if (sizer_entry->owner_window)
+            set_sizer_owner_recursive(child_sizer, sizer_entry->owner_window,
+                                      sizer_entry->frame);
+    }
     else
+    {
         return -1;
+    }
+
     return 1;
 }
 
@@ -622,13 +709,30 @@ int32_t ui_window_set_sizer(uint64_t window_handle, uint64_t sizer_handle)
 {
     if (!on_gui_thread())
         return -1;
+
     wxWindow* window = find_ui_window(window_handle);
-    UiHandleEntry* entry = find_ui_handle(sizer_handle, UiHandleKind::Sizer);
-    if (!window || !entry)
+    UiHandleEntry* window_entry = find_ui_handle(window_handle, UiHandleKind::Window);
+    UiHandleEntry* sizer_entry = find_ui_handle(sizer_handle, UiHandleKind::Sizer);
+    if (!window || !window_entry || !sizer_entry)
         return -1;
-    window->SetSizer(static_cast<wxSizer*>(entry->pointer));
-    entry->frame = g_ui_handles[window_handle].frame;
-    entry->owner_window = window;
+
+    auto* new_sizer = static_cast<wxSizer*>(sizer_entry->pointer);
+    if (!new_sizer || (sizer_entry->owner_window && sizer_entry->owner_window != window))
+        return -1;
+
+    wxSizer* old_sizer = window->GetSizer();
+    if (old_sizer == new_sizer)
+        return 1;
+
+    // SetSizer() deletes the old root sizer by default. Invalidate handles for
+    // the whole old tree before wxWidgets recursively destroys its children.
+    if (old_sizer && ui_sizer_contains(old_sizer, new_sizer))
+        return -1;
+    if (old_sizer)
+        forget_ui_sizer_tree_handles(old_sizer);
+
+    window->SetSizer(new_sizer);
+    set_sizer_owner_recursive(new_sizer, window, window_entry->frame);
     return 1;
 }
 
