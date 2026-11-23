@@ -203,6 +203,26 @@ typedef struct KUA_HostApi
     uint64_t (*ui_window_observe)(uint64_t editor_frame,
                                   KUA_UiWindowEventCallback callback, void* user_data);
     int32_t (*ui_window_unobserve)(uint64_t observer);
+
+    /* Appended native-control and common wxWindow operations. */
+    int32_t (*ui_text_ctrl_set_value)(uint64_t text_ctrl, const char* value);
+    int32_t (*ui_text_ctrl_get_value)(uint64_t text_ctrl, char* buffer, uint32_t capacity);
+    int32_t (*ui_check_box_set_value)(uint64_t check_box, int32_t checked);
+    int32_t (*ui_check_box_get_value)(uint64_t check_box);
+    int32_t (*ui_choice_append)(uint64_t choice, const char* item);
+    int32_t (*ui_choice_clear)(uint64_t choice);
+    int32_t (*ui_choice_get_count)(uint64_t choice);
+    int32_t (*ui_choice_set_selection)(uint64_t choice, int32_t selection);
+    int32_t (*ui_choice_get_selection)(uint64_t choice);
+    int32_t (*ui_choice_get_string_selection)(uint64_t choice,
+                                              char* buffer, uint32_t capacity);
+    int32_t (*ui_window_enable)(uint64_t window, int32_t enabled);
+    int32_t (*ui_window_raise)(uint64_t window);
+    int32_t (*ui_window_set_focus)(uint64_t window);
+    int32_t (*ui_window_set_size)(uint64_t window, int32_t width, int32_t height);
+    int32_t (*ui_window_get_size)(uint64_t window, int32_t* width, int32_t* height);
+    int32_t (*ui_window_set_position)(uint64_t window, int32_t x, int32_t y);
+    int32_t (*ui_window_get_position)(uint64_t window, int32_t* x, int32_t* y);
 } KUA_HostApi;
 
 typedef struct KUA_ExtensionApi
