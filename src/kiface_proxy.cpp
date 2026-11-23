@@ -92,6 +92,7 @@ bool g_extensions_shutdown = false;
 std::atomic<bool> g_gui_callbacks_enabled{true};
 
 #if !defined(KUA_SYNTHETIC_ABI)
+bool on_gui_thread();
 struct OverlayState
 {
     void* frame{};
@@ -203,7 +204,7 @@ void copy_utf8_to_buffer(const wxString& value, char* buffer, uint32_t capacity)
     const size_t count = source ? std::min<size_t>(std::strlen(source), capacity - 1) : 0;
     if (count)
         std::memcpy(buffer, source, count);
-    buffer[count] = '\\0';
+    buffer[count] = '\0';
 }
 
 uint64_t ui_window_get_handle(void* borrowed_window)
@@ -324,7 +325,7 @@ int32_t ui_window_get_class_name(uint64_t handle, char* buffer, uint32_t capacit
     if (!window)
         return -1;
     wxClassInfo* info = window->GetClassInfo();
-    copy_utf8_to_buffer(info ? wxString::FromUTF8(info->GetClassName()) : wxString("wxWindow"),
+    copy_utf8_to_buffer(info ? wxString(info->GetClassName()) : wxString("wxWindow"),
                         buffer, capacity);
     return 1;
 }
