@@ -136,6 +136,7 @@ typedef struct KUA_HostApi
     int32_t (*overlay_rectangle)(uint64_t overlay, double x1, double y1, double x2, double y2);
 
     /* Native wxWidgets/KiCad UI bindings. Opaque handles are GUI-thread-only. */
+    /* Wraps a borrowed wxWindow owned by one of the registered KiCad editor frames. */
     uint64_t (*ui_window_get_handle)(void* borrowed_native_window);
     uint64_t (*ui_window_create)(uint64_t parent, uint32_t kind, int32_t id,
                                  const char* text, int32_t style);
