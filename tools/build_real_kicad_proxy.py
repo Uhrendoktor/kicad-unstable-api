@@ -95,6 +95,8 @@ def make_link_command(
     abi_tag: str,
 ) -> list[str]:
     compiler, flags = compiler_and_flags(entry)
+    project_include = Path(__file__).resolve().parents[1] / "include"
+    flags.extend(["-I", str(project_include)])
     if not any(flag.startswith("-std=") for flag in flags):
         flags.append("-std=c++20")
     if "-fPIC" not in flags:
