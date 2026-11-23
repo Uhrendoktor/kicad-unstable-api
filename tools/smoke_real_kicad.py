@@ -58,9 +58,23 @@ def run_editor(
 ) -> None:
     environment = os.environ.copy()
     environment["KUA_SMOKE_LOG"] = str(log_file)
+    environment["KICAD_ENABLE_WXTRACE"] = "1"
+    command = [str(executable), *arguments]
+    trace_log = output_log.with_suffix(".strace")
+    strace = shutil.which("strace")
+    if strace:
+        command = [
+            strace, "-f", "-s", "256",
+            "-e", "trace=openat,open,statx",
+            "-o", str(trace_log),
+            "--", *command,
+        ]
+
     with output_log.open("w", encoding="utf-8") as output:
+        output.write(f"Executable: {executable}\\nArguments: {arguments}\\n")
+        output.flush()
         process = subprocess.Popen(
-            [str(executable), *arguments],
+            command,
             cwd=executable.parent,
             env=environment,
             stdout=output,
