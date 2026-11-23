@@ -50,7 +50,7 @@ jobs:
             libocct-foundation-dev libocct-ocaf-dev unixodbc-dev zlib1g-dev \
             shared-mime-info libgit2-dev libsecret-1-dev libnng-dev \
             libprotobuf-dev protobuf-compiler swig python3-pip python3-venv \
-            libzstd-dev libspnav-dev libpoppler-glib-dev libsqlite3-dev
+            libzstd-dev libspnav-dev libpoppler-glib-dev libsqlite3-dev xvfb xauth
       - name: Fetch pinned KiCad source
         run: |
           git init /tmp/kicad-source
@@ -73,10 +73,22 @@ jobs:
             --kicad-source /tmp/kicad-source \
             --kicad-build /tmp/kicad-build \
             --output-dir build/real-kicad
+      - name: Build matching Eeschema and PCB Editor binaries
+        run: cmake --build /tmp/kicad-build --parallel 2 --target eeschema pcbnew
       - name: Build live-editor GAL smoke extension
         run: |
           cmake -S . -B build/smoke-extension -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
           cmake --build build/smoke-extension --target kua_real_smoke_extension --parallel
+      - name: Run real Eeschema and PCB Editor GAL smoke test
+        run: |
+          xvfb-run -a -s "-screen 0 1920x1080x24" python3 tools/smoke_real_kicad.py \
+            --eeschema-install-dir /tmp/kicad-build/eeschema \
+            --pcbnew-install-dir /tmp/kicad-build/pcbnew \
+            --proxy-dir build/real-kicad \
+            --smoke-extension build/smoke-extension/kua_real_smoke_extension.so \
+            --eeschema /tmp/kicad-build/eeschema/eeschema \
+            --pcbnew /tmp/kicad-build/pcbnew/pcbnew \
+            --timeout 90
       - uses: actions/upload-artifact@v4
         with:
           name: real-kicad-linux-proxies
