@@ -10,6 +10,8 @@
 #include <wx/frame.h>
 #include <wx/menu.h>
 #include <wx/sizer.h>
+#include <wx/aui/aui.h>
+#include <wx/panel.h>
 #endif
 
 namespace
@@ -20,6 +22,21 @@ int g_window_hidden_events = 0;
 int g_window_destroying_events = 0;
 int g_destroy_event_handle_valid = 0;
 uint64_t g_last_destroy_event_handle = 0;
+
+#if defined(KUA_SMOKE_WITH_WX)
+class KuaSmokeManagedAuiPanel final : public wxPanel
+{
+public:
+    explicit KuaSmokeManagedAuiPanel(wxWindow* parent)
+        : wxPanel(parent, wxID_ANY), manager_(this)
+    {
+    }
+
+private:
+    // Mirrors the common ownership pattern where a child window owns its manager.
+    wxAuiManager manager_;
+};
+#endif
 
 void on_native_window_event(uint64_t window, uint32_t event_kind, void*)
 {
@@ -251,6 +268,30 @@ void on_window(const KUA_EditorContext* context)
     if (pane_detached > 0)
         g_host->ui_aui_update(manager);
 
+    int aui_owner_lifetime_ok = 1;
+#if defined(KUA_SMOKE_WITH_WX)
+    auto* managed_editor_frame = dynamic_cast<wxFrame*>(static_cast<wxWindow*>(context->frame));
+    auto* managed_panel = managed_editor_frame
+        ? new KuaSmokeManagedAuiPanel(managed_editor_frame)
+        : nullptr;
+    const uint64_t managed_panel_handle = managed_panel
+        ? g_host->ui_window_get_handle(managed_panel)
+        : 0;
+    const uint64_t managed_manager = managed_panel_handle
+        ? g_host->ui_aui_get_manager(managed_panel_handle)
+        : 0;
+    const int32_t managed_manager_before_destroy = managed_manager
+        ? g_host->ui_aui_update(managed_manager)
+        : -1;
+    const bool managed_panel_destroyed = managed_panel && managed_panel->Destroy();
+    const int32_t managed_manager_after_destroy = managed_manager
+        ? g_host->ui_aui_update(managed_manager)
+        : -2;
+    aui_owner_lifetime_ok = managed_panel_handle && managed_manager &&
+                            managed_manager_before_destroy > 0 &&
+                            managed_panel_destroyed && managed_manager_after_destroy == -1;
+#endif
+
     const uint64_t menu_bar = frame_window ? g_host->ui_menu_bar_get(frame_window) : 0;
     const uint64_t menu = menu_bar ? g_host->ui_menu_create(frame_window) : 0;
     constexpr int32_t smoke_menu_id = 61000;
@@ -327,14 +368,14 @@ void on_window(const KUA_EditorContext* context)
 
     char ui_details[512]{};
     std::snprintf(ui_details, sizeof(ui_details),
-                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|class=%d|sizer_replace=%d|sizer_destroy=%d|aui=%d|pane=%d|update=%d|detach=%d|menu=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
+                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|class=%d|sizer_replace=%d|sizer_destroy=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
                   frame_window != 0, top_level_initial, dialog != 0, dialog_shown, dialog_hidden,
                   dialog_enumerated, dialog_destroyed, stale_dialog_handle, destroy_probe != 0,
                   destroy_probe_result, stale_destroy_probe, g_destroy_event_handle_valid,
                   expired_destroy_event_handle, window_observer_removed,
                   g_window_shown_events, g_window_hidden_events, g_window_destroying_events,
                   panel != 0, panel_destroyed, page_added, page_count, class_read,
-                  sizer_replacement_ok, sizer_owner_destroyed_ok, manager != 0, pane_added,
+                  sizer_replacement_ok, sizer_owner_destroyed_ok, manager != 0, aui_owner_lifetime_ok, pane_added,
                   aui_updated, pane_detached, menu_attached, menu_binding != 0, menu_dispatch_ok,
                   menu_callback_count, menu_unbound, property_result);
     const bool ui_ok = frame_window && top_level_initial > 0 && window_observer &&
@@ -347,7 +388,7 @@ void on_window(const KUA_EditorContext* context)
                        page_count == 1 && class_read > 0 &&
                        std::string(class_name).find("wxNotebook") != std::string::npos &&
                        sizer_replacement_ok && sizer_owner_destroyed_ok &&
-                       pane_added > 0 && aui_updated > 0 && pane_detached > 0 &&
+                       aui_owner_lifetime_ok && pane_added > 0 && aui_updated > 0 && pane_detached > 0 &&
                        menu_attached > 0 && menu_binding != 0 && menu_dispatch_ok &&
                        menu_unbound > 0 && (!property_grid || property_result > 0);
     record(ui_ok ? "native-ui-ready" : "native-ui-failed",
