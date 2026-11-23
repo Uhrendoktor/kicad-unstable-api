@@ -11,12 +11,12 @@ permissions:
 
 jobs:
   native-loader:
-    name: \${{ matrix.os }} KIFACE proxy harness
+    name: ${{ matrix.os }} KIFACE proxy harness
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-15]
-    runs-on: \${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: Verify KIFACE vtable order against pinned KiCad source
