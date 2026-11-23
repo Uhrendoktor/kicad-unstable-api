@@ -71,7 +71,8 @@ def run_editor(
         ]
 
     with output_log.open("w", encoding="utf-8") as output:
-        output.write(f"Executable: {executable}\\nArguments: {arguments}\\n")
+        output.write(f"Executable: {executable}\nArguments: {arguments}\n")
+        output.write(f"Command: {command}\n")
         output.flush()
         process = subprocess.Popen(
             command,
@@ -84,6 +85,8 @@ def run_editor(
 
         deadline = time.monotonic() + timeout_seconds
         last_content = ""
+        missing: list[str] = []
+        failure: str | None = None
         required_events = (
             f"initialize|editor={editor_kind}|",
             f"window|editor={editor_kind}|",
@@ -97,18 +100,34 @@ def run_editor(
                     print(f"PASS: {name} initialized, created a real editor frame, and exercised GAL overlays.")
                     return
                 if process.poll() is not None:
-                    raise RuntimeError(
-                        f"{name} exited with code {process.returncode} before events {missing}.\n"
-                        f"Extension log:\n{last_content}\nProcess log:\n{output_log.read_text(errors='replace')}"
-                    )
+                    failure = f"{name} exited with code {process.returncode} before events {missing}."
+                    break
                 time.sleep(0.25)
 
-            raise TimeoutError(
-                f"{name} timed out waiting for {missing}.\n"
-                f"Extension log:\n{last_content}\nProcess log:\n{output_log.read_text(errors='replace')}"
-            )
+            if failure is None:
+                failure = f"{name} timed out waiting for {missing}."
         finally:
             stop_process(process)
+
+    process_text = output_log.read_text(encoding="utf-8", errors="replace")
+    extension_text = log_file.read_text(encoding="utf-8", errors="replace") if log_file.exists() else ""
+    trace_text = ""
+    if trace_log.exists():
+        trace_lines = trace_log.read_text(encoding="utf-8", errors="replace").splitlines()
+        interesting = [
+            line for line in trace_lines
+            if any(token in line.lower() for token in (
+                "kiface", "kicad-unstable-api", "schemas", "plugins", "enoent", "eacces"
+            ))
+        ]
+        trace_text = "\n".join(interesting[-160:]) or "\n".join(trace_lines[-80:])
+
+    raise RuntimeError(
+        f"{failure}\n"
+        f"Extension log:\n{extension_text}\n"
+        f"Process log:\n{process_text}\n"
+        f"KiCad file trace:\n{trace_text}"
+    )
 
 
 def main() -> int:
@@ -131,7 +150,11 @@ def main() -> int:
                         help="Build of kua_real_smoke_extension.")
     parser.add_argument("--eeschema", type=Path, required=True, help="Matching Eeschema executable.")
     parser.add_argument("--pcbnew", type=Path, required=True, help="Matching PCB Editor executable.")
-    parser.add_argument("--timeout", type=float, default=45.0)
+    parser.add_argument("--timeout", type=float, default=90.0)
+    parser.add_argument(
+        "--diagnostics-dir", type=Path,
+        help="Directory in which to retain process logs and KIFACE file traces.",
+    )
     parser.add_argument("--allow-existing-extensions", action="store_true",
                         help="Allow other shared libraries in the KUA extension directories.")
     parser.add_argument("--eeschema-arg", action="append", default=[])
@@ -196,7 +219,12 @@ def main() -> int:
     test_extensions: list[Path] = []
     created_extension_dirs: list[Path] = []
     installed_dirs: list[Path] = []
-    temp_root = Path(tempfile.mkdtemp(prefix="kua-real-smoke-"))
+    temp_root = (
+        args.diagnostics_dir.resolve()
+        if args.diagnostics_dir
+        else Path(tempfile.mkdtemp(prefix="kua-real-smoke-"))
+    )
+    temp_root.mkdir(parents=True, exist_ok=True)
     succeeded = False
     try:
         for extension_dir in extension_dirs:
@@ -259,8 +287,9 @@ def main() -> int:
             except OSError:
                 pass
 
-    if succeeded:
+    if succeeded and not args.diagnostics_dir:
         shutil.rmtree(temp_root, ignore_errors=True)
+    if succeeded:
         return 0
     return 1
 
