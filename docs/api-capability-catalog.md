@@ -60,9 +60,9 @@ Each KUA call should map to an existing native method/event or a mechanical sequ
 | `overlay_line/circle/rectangle` | Initial GAL primitives | Implemented |
 | `KUA_EditorContext.frame/canvas/view` | Borrowed editor handles | Implemented |
 | extension lifecycle callbacks | Initialize, editor-created, reset and shutdown | Implemented |
-| `ui_window_get_top_level_windows` | Enumerate top-level windows owned by an editor frame | Unverified |
-| `ui_window_observe/unobserve` | Observe native window show/hide/destroy events without consuming KiCad events | Unverified |
-| native window destroy tracking | Invalidate window and owned sizer/property handles when the wxWindow is destroyed | Unverified |
+| `ui_window_get_top_level_windows` | Enumerate top-level windows owned by an editor frame | Implemented; live-editor acceptance pending |
+| `ui_window_observe/unobserve` | Observe native window show/hide/destroy events without consuming KiCad events | Implemented; live-editor acceptance pending |
+| native window destroy tracking | Invalidate window and owned sizer/property handles when the wxWindow is destroyed | Implemented; live-editor acceptance pending |
 | precise menu callback unbind | Remove only KUA's own `wxEVT_MENU` handler for its ID | Implemented; exact-build smoke pending |
 | `ui_text_ctrl_*` | Read/write native `wxTextCtrl` values | Implemented; exact-build smoke pending |
 | `ui_check_box_*` | Read/write native `wxCheckBox` state | Implemented; exact-build smoke pending |
