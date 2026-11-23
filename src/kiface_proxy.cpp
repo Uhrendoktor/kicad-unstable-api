@@ -366,7 +366,12 @@ bool load_original(KIFACE_GETTER_FUNC** getter_out, int* version, int kiway_vers
         return false;
     }
 
+    if (std::getenv("KUA_SMOKE_LOG"))
+        log_message(1, ("Proxy KIFACE_1 entered: " + proxy_path.string()).c_str());
+
     const auto original_path = original_module_path(proxy_path);
+    if (std::getenv("KUA_SMOKE_LOG"))
+        log_message(1, ("Opening preserved KiCad KIFACE: " + original_path.string()).c_str());
     g_original_handle = open_module(original_path);
     if (!g_original_handle)
     {
@@ -400,8 +405,18 @@ public:
 
     bool OnKifaceStart(PGM_BASE* program, int control_bits, KIWAY* kiway) override
     {
+        if (std::getenv("KUA_SMOKE_LOG"))
+            log_message(1, "Proxy OnKifaceStart entered.");
+
         if (!m_original || !m_original->OnKifaceStart(program, control_bits, kiway))
+        {
+            if (std::getenv("KUA_SMOKE_LOG"))
+                log_message(3, "Preserved original KIFACE OnKifaceStart failed.");
             return false;
+        }
+
+        if (std::getenv("KUA_SMOKE_LOG"))
+            log_message(1, "Preserved original KIFACE OnKifaceStart succeeded.");
 
         initialize_extensions(program, kiway);
         return true;
@@ -548,8 +563,14 @@ private:
 
         const auto extension_dir = module_path.parent_path() / "kicad-unstable-api" / "extensions";
         std::error_code ec;
+        if (std::getenv("KUA_SMOKE_LOG"))
+            log_message(1, ("Extension search directory: " + extension_dir.string()).c_str());
         if (!std::filesystem::is_directory(extension_dir, ec))
+        {
+            if (std::getenv("KUA_SMOKE_LOG"))
+                log_message(2, ("Extension directory is unavailable: " + ec.message()).c_str());
             return;
+        }
 
         g_host_api = make_host_api();
         for (const auto& entry : std::filesystem::directory_iterator(extension_dir, ec))
@@ -651,6 +672,9 @@ KIFACE_PROXY* g_proxy{};
 
 extern "C" KUA_EXPORT KIFACE* KIFACE_1(int* version, int kiway_version, PGM_BASE* program)
 {
+    if (std::getenv("KUA_SMOKE_LOG"))
+        log_message(1, "Proxy KIFACE_1 entry point was called.");
+
     KIFACE_GETTER_FUNC* unused_getter = nullptr;
     if (!load_original(&unused_getter, version, kiway_version, program))
         return nullptr;
