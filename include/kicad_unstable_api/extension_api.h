@@ -32,6 +32,70 @@ typedef struct KUA_EditorContext
 
 typedef void (*KUA_GuiCallback)(void* user_data);
 
+typedef enum KUA_UiWindowKind
+{
+    KUA_UI_WINDOW_PANEL = 1,
+    KUA_UI_WINDOW_DIALOG = 2,
+    KUA_UI_WINDOW_FRAME = 3,
+    KUA_UI_WINDOW_NOTEBOOK = 4,
+    KUA_UI_WINDOW_STATIC_TEXT = 5,
+    KUA_UI_WINDOW_BUTTON = 6,
+    KUA_UI_WINDOW_TEXT_CTRL = 7,
+    KUA_UI_WINDOW_CHECK_BOX = 8,
+    KUA_UI_WINDOW_CHOICE = 9
+} KUA_UiWindowKind;
+
+typedef enum KUA_UiSizerKind
+{
+    KUA_UI_SIZER_BOX = 1,
+    KUA_UI_SIZER_FLEX_GRID = 2
+} KUA_UiSizerKind;
+
+typedef enum KUA_UiMenuItemKind
+{
+    KUA_UI_MENU_NORMAL = 0,
+    KUA_UI_MENU_CHECK = 1,
+    KUA_UI_MENU_RADIO = 2
+} KUA_UiMenuItemKind;
+
+typedef enum KUA_AuiDirection
+{
+    KUA_AUI_LEFT = 0,
+    KUA_AUI_RIGHT = 1,
+    KUA_AUI_TOP = 2,
+    KUA_AUI_BOTTOM = 3,
+    KUA_AUI_CENTER = 4,
+    KUA_AUI_FLOATING = 5
+} KUA_AuiDirection;
+
+enum
+{
+    KUA_AUI_CLOSE_BUTTON = 1u << 0,
+    KUA_AUI_PIN_BUTTON = 1u << 1,
+    KUA_AUI_CAPTION_VISIBLE = 1u << 2,
+    KUA_AUI_PANE_BORDER = 1u << 3,
+    KUA_AUI_MOVABLE = 1u << 4,
+    KUA_AUI_RESIZABLE = 1u << 5,
+    KUA_AUI_FLOATABLE = 1u << 6,
+    KUA_AUI_DOCKABLE = 1u << 7
+};
+
+typedef struct KUA_AuiPaneOptions
+{
+    uint32_t struct_size;
+    const char* name;
+    const char* caption;
+    uint32_t direction;
+    int32_t layer;
+    int32_t row;
+    int32_t position;
+    int32_t best_width;
+    int32_t best_height;
+    int32_t min_width;
+    int32_t min_height;
+    uint32_t flags;
+} KUA_AuiPaneOptions;
+
 /*
  * Overlay coordinates are KiCad world coordinates (internal units), not pixels.
  * Handles are host-owned and must only be used on the editor GUI thread.
@@ -56,6 +120,64 @@ typedef struct KUA_HostApi
     int32_t (*overlay_line)(uint64_t overlay, double x1, double y1, double x2, double y2);
     int32_t (*overlay_circle)(uint64_t overlay, double cx, double cy, double radius);
     int32_t (*overlay_rectangle)(uint64_t overlay, double x1, double y1, double x2, double y2);
+
+    /* Native wxWidgets/KiCad UI bindings. Opaque handles are GUI-thread-only. */
+    uint64_t (*ui_window_get_handle)(void* borrowed_native_window);
+    uint64_t (*ui_window_create)(uint64_t parent, uint32_t kind, int32_t id,
+                                 const char* text, int32_t style);
+    int32_t (*ui_window_destroy)(uint64_t window);
+    int32_t (*ui_window_show)(uint64_t window, int32_t show);
+    int32_t (*ui_window_get_children)(uint64_t parent, uint64_t* handles, uint32_t capacity);
+    int32_t (*ui_window_get_class_name)(uint64_t window, char* buffer, uint32_t capacity);
+    int32_t (*ui_window_set_text)(uint64_t window, const char* text);
+    uint64_t (*ui_sizer_create)(uint32_t kind, int32_t orientation,
+                                int32_t rows, int32_t cols, int32_t vgap, int32_t hgap);
+    int32_t (*ui_sizer_add)(uint64_t sizer, uint64_t child, int32_t proportion,
+                            int32_t flags, int32_t border);
+    int32_t (*ui_window_set_sizer)(uint64_t window, uint64_t sizer);
+    int32_t (*ui_window_layout)(uint64_t window);
+
+    int32_t (*ui_notebook_add_page)(uint64_t notebook, uint64_t page,
+                                    const char* label, int32_t select);
+    int32_t (*ui_notebook_insert_page)(uint64_t notebook, uint32_t index, uint64_t page,
+                                       const char* label, int32_t select);
+    int32_t (*ui_notebook_remove_page)(uint64_t notebook, uint32_t index);
+    int32_t (*ui_notebook_get_page_count)(uint64_t notebook);
+    int32_t (*ui_notebook_set_selection)(uint64_t notebook, int32_t index);
+    int32_t (*ui_notebook_get_page_text)(uint64_t notebook, uint32_t index,
+                                         char* buffer, uint32_t capacity);
+
+    uint64_t (*ui_menu_bar_get)(uint64_t frame);
+    uint64_t (*ui_menu_create)(uint64_t frame);
+    int32_t (*ui_menu_append)(uint64_t menu, int32_t id, const char* label,
+                              const char* help, uint32_t kind);
+    int32_t (*ui_menu_delete)(uint64_t menu, int32_t id);
+    int32_t (*ui_menu_bar_append)(uint64_t menu_bar, uint64_t menu, const char* title);
+    int32_t (*ui_menu_bar_remove)(uint64_t menu_bar, uint32_t index);
+    uint64_t (*ui_menu_bind)(uint64_t frame, int32_t id,
+                             KUA_GuiCallback callback, void* user_data);
+    int32_t (*ui_menu_unbind)(uint64_t binding);
+
+    uint64_t (*ui_aui_get_manager)(uint64_t window);
+    int32_t (*ui_aui_add_pane)(uint64_t manager, uint64_t window,
+                               const KUA_AuiPaneOptions* options);
+    int32_t (*ui_aui_detach_pane)(uint64_t manager, uint64_t window);
+    int32_t (*ui_aui_update)(uint64_t manager);
+
+    uint64_t (*ui_properties_get_panel)(uint64_t editor_frame);
+    uint64_t (*ui_properties_get_grid)(uint64_t properties_panel);
+    int32_t (*ui_property_grid_append_string)(uint64_t grid, const char* label,
+                                              const char* name, const char* value);
+    int32_t (*ui_property_grid_append_bool)(uint64_t grid, const char* label,
+                                            const char* name, int32_t value);
+    int32_t (*ui_property_grid_append_int)(uint64_t grid, const char* label,
+                                           const char* name, int64_t value);
+    int32_t (*ui_property_grid_append_float)(uint64_t grid, const char* label,
+                                             const char* name, double value);
+    int32_t (*ui_property_grid_set_string)(uint64_t grid, const char* name, const char* value);
+    int32_t (*ui_property_grid_get_string)(uint64_t grid, const char* name,
+                                           char* buffer, uint32_t capacity);
+    int32_t (*ui_property_grid_delete)(uint64_t grid, const char* name);
 } KUA_HostApi;
 
 typedef struct KUA_ExtensionApi

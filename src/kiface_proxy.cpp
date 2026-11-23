@@ -7,6 +7,21 @@
 #  include <eda_draw_frame.h>
 #  include <wx/app.h>
 #  include <wx/thread.h>
+#  include <wx/dialog.h>
+#  include <wx/frame.h>
+#  include <wx/panel.h>
+#  include <wx/notebook.h>
+#  include <wx/button.h>
+#  include <wx/textctrl.h>
+#  include <wx/checkbox.h>
+#  include <wx/choice.h>
+#  include <wx/stattext.h>
+#  include <wx/sizer.h>
+#  include <wx/menu.h>
+#  include <wx/aui/aui.h>
+#  include <wx/propgrid/propgrid.h>
+#  include <wx/propgrid/advprops.h>
+#  include <widgets/properties_panel.h>
 #  include <view/view.h>
 #  include <view/view_overlay.h>
 #  include <gal/color4d.h>
@@ -18,6 +33,9 @@
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <cstring>
+#include <cmath>
+#include <limits>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -87,6 +105,658 @@ uint64_t g_next_overlay_handle = 1;
 struct EditorFrameState { EDA_DRAW_PANEL_GAL* canvas{}; KIGFX::VIEW* view{}; };
 std::unordered_map<void*, EditorFrameState> g_editor_frames;
 
+enum class UiHandleKind { Window, Sizer, MenuBar, Menu, AuiManager, PropertyGrid };
+
+struct UiHandleEntry
+{
+    UiHandleKind kind{};
+    void* pointer{};
+    void* frame{};
+};
+
+struct MenuBindingEntry
+{
+    wxWindow* frame{};
+    int id{};
+};
+
+std::unordered_map<uint64_t, UiHandleEntry> g_ui_handles;
+std::unordered_map<uint64_t, MenuBindingEntry> g_menu_bindings;
+uint64_t g_next_ui_handle = 1;
+
+uint64_t register_ui_handle(void* pointer, UiHandleKind kind, void* frame)
+{
+    if (!pointer)
+        return 0;
+
+    for (const auto& [handle, entry] : g_ui_handles)
+    {
+        if (entry.pointer == pointer && entry.kind == kind)
+            return handle;
+    }
+
+    uint64_t handle = g_next_ui_handle++;
+    if (handle == 0)
+        handle = g_next_ui_handle++;
+    g_ui_handles.emplace(handle, UiHandleEntry{kind, pointer, frame});
+    return handle;
+}
+
+UiHandleEntry* find_ui_handle(uint64_t handle, UiHandleKind kind)
+{
+    const auto it = g_ui_handles.find(handle);
+    if (it == g_ui_handles.end() || it->second.kind != kind)
+        return nullptr;
+    return &it->second;
+}
+
+wxWindow* find_ui_window(uint64_t handle)
+{
+    UiHandleEntry* entry = find_ui_handle(handle, UiHandleKind::Window);
+    return entry ? static_cast<wxWindow*>(entry->pointer) : nullptr;
+}
+
+void forget_ui_handles_for_frame(void* frame)
+{
+    for (auto it = g_ui_handles.begin(); it != g_ui_handles.end();)
+    {
+        if (it->second.frame == frame)
+            it = g_ui_handles.erase(it);
+        else
+            ++it;
+    }
+
+    for (auto it = g_menu_bindings.begin(); it != g_menu_bindings.end();)
+    {
+        if (it->second.frame == frame)
+            it = g_menu_bindings.erase(it);
+        else
+            ++it;
+    }
+}
+
+void forget_ui_window_tree(wxWindow* window)
+{
+    if (!window)
+        return;
+
+    for (auto it = g_ui_handles.begin(); it != g_ui_handles.end();)
+    {
+        if (it->second.kind == UiHandleKind::Window && it->second.pointer == window)
+            it = g_ui_handles.erase(it);
+        else
+            ++it;
+    }
+
+    const wxWindowList& children = window->GetChildren();
+    for (wxWindowList::compatibility_iterator node = children.GetFirst(); node; node = node->GetNext())
+        forget_ui_window_tree(node->GetData());
+}
+
+void copy_utf8_to_buffer(const wxString& value, char* buffer, uint32_t capacity)
+{
+    if (!buffer || capacity == 0)
+        return;
+
+    const wxScopedCharBuffer utf8 = value.utf8_str();
+    const char* source = utf8.data();
+    const size_t count = source ? std::min<size_t>(std::strlen(source), capacity - 1) : 0;
+    if (count)
+        std::memcpy(buffer, source, count);
+    buffer[count] = '\\0';
+}
+
+uint64_t ui_window_get_handle(void* borrowed_window)
+{
+    if (!on_gui_thread() || !borrowed_window)
+        return 0;
+
+    for (const auto& [frame, state] : g_editor_frames)
+    {
+        (void)state;
+        if (frame == borrowed_window)
+            return register_ui_handle(frame, UiHandleKind::Window, frame);
+    }
+
+    return 0;
+}
+
+uint64_t ui_window_create(uint64_t parent_handle, uint32_t kind, int32_t id,
+                          const char* text, int32_t style)
+{
+    if (!on_gui_thread())
+        return 0;
+
+    wxWindow* parent = find_ui_window(parent_handle);
+    if (!parent)
+        return 0;
+
+    const wxWindowID window_id = id == -1 ? wxID_ANY : id;
+    const wxString label = wxString::FromUTF8(text ? text : "");
+    wxWindow* window = nullptr;
+
+    switch (kind)
+    {
+    case KUA_UI_WINDOW_PANEL:
+        window = new wxPanel(parent, window_id);
+        break;
+    case KUA_UI_WINDOW_DIALOG:
+        window = new wxDialog(parent, window_id, label, wxDefaultPosition, wxDefaultSize, style);
+        break;
+    case KUA_UI_WINDOW_FRAME:
+        window = new wxFrame(parent, window_id, label, wxDefaultPosition, wxDefaultSize, style);
+        break;
+    case KUA_UI_WINDOW_NOTEBOOK:
+        window = new wxNotebook(parent, window_id, wxDefaultPosition, wxDefaultSize, style);
+        break;
+    case KUA_UI_WINDOW_STATIC_TEXT:
+        window = new wxStaticText(parent, window_id, label);
+        break;
+    case KUA_UI_WINDOW_BUTTON:
+        window = new wxButton(parent, window_id, label);
+        break;
+    case KUA_UI_WINDOW_TEXT_CTRL:
+        window = new wxTextCtrl(parent, window_id, label);
+        break;
+    case KUA_UI_WINDOW_CHECK_BOX:
+        window = new wxCheckBox(parent, window_id, label);
+        break;
+    case KUA_UI_WINDOW_CHOICE:
+        window = new wxChoice(parent, window_id);
+        break;
+    default:
+        return 0;
+    }
+
+    if (!window)
+        return 0;
+
+    return register_ui_handle(window, UiHandleKind::Window,
+                              g_ui_handles[parent_handle].frame);
+}
+
+int32_t ui_window_destroy(uint64_t handle)
+{
+    if (!on_gui_thread())
+        return -1;
+
+    wxWindow* window = find_ui_window(handle);
+    if (!window)
+        return -1;
+
+    forget_ui_window_tree(window);
+    return window->Destroy() ? 1 : 0;
+}
+
+int32_t ui_window_show(uint64_t handle, int32_t show)
+{
+    if (!on_gui_thread())
+        return -1;
+    wxWindow* window = find_ui_window(handle);
+    return window ? (window->Show(show != 0) ? 1 : 0) : -1;
+}
+
+int32_t ui_window_get_children(uint64_t parent_handle, uint64_t* handles, uint32_t capacity)
+{
+    if (!on_gui_thread())
+        return -1;
+    wxWindow* parent = find_ui_window(parent_handle);
+    if (!parent)
+        return -1;
+
+    const wxWindowList& children = parent->GetChildren();
+    int32_t count = 0;
+    for (wxWindowList::compatibility_iterator node = children.GetFirst(); node; node = node->GetNext())
+    {
+        if (handles && static_cast<uint32_t>(count) < capacity)
+            handles[count] = register_ui_handle(node->GetData(), UiHandleKind::Window,
+                                                g_ui_handles[parent_handle].frame);
+        ++count;
+    }
+    return count;
+}
+
+int32_t ui_window_get_class_name(uint64_t handle, char* buffer, uint32_t capacity)
+{
+    if (!on_gui_thread() || !buffer || capacity == 0)
+        return -1;
+    wxWindow* window = find_ui_window(handle);
+    if (!window)
+        return -1;
+    wxClassInfo* info = window->GetClassInfo();
+    copy_utf8_to_buffer(info ? wxString::FromUTF8(info->GetClassName()) : wxString("wxWindow"),
+                        buffer, capacity);
+    return 1;
+}
+
+int32_t ui_window_set_text(uint64_t handle, const char* text)
+{
+    if (!on_gui_thread() || !text)
+        return -1;
+    wxWindow* window = find_ui_window(handle);
+    if (!window)
+        return -1;
+    if (wxDynamicCast(window, wxTopLevelWindow))
+        wxDynamicCast(window, wxTopLevelWindow)->SetTitle(wxString::FromUTF8(text));
+    else if (wxDynamicCast(window, wxControl))
+        wxDynamicCast(window, wxControl)->SetLabel(wxString::FromUTF8(text));
+    else
+        return -1;
+    return 1;
+}
+
+uint64_t ui_sizer_create(uint32_t kind, int32_t orientation,
+                         int32_t rows, int32_t cols, int32_t vgap, int32_t hgap)
+{
+    if (!on_gui_thread())
+        return 0;
+    wxSizer* sizer = nullptr;
+    if (kind == KUA_UI_SIZER_BOX)
+        sizer = new wxBoxSizer(orientation);
+    else if (kind == KUA_UI_SIZER_FLEX_GRID && rows >= 0 && cols >= 0 && vgap >= 0 && hgap >= 0)
+        sizer = new wxFlexGridSizer(rows, cols, vgap, hgap);
+    return register_ui_handle(sizer, UiHandleKind::Sizer, nullptr);
+}
+
+int32_t ui_sizer_add(uint64_t sizer_handle, uint64_t child_handle,
+                     int32_t proportion, int32_t flags, int32_t border)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* sizer_entry = find_ui_handle(sizer_handle, UiHandleKind::Sizer);
+    if (!sizer_entry)
+        return -1;
+    UiHandleEntry* child_entry = nullptr;
+    const auto child_it = g_ui_handles.find(child_handle);
+    if (child_it != g_ui_handles.end())
+        child_entry = &child_it->second;
+    if (!child_entry)
+        return -1;
+
+    auto* sizer = static_cast<wxSizer*>(sizer_entry->pointer);
+    if (child_entry->kind == UiHandleKind::Window)
+        sizer->Add(static_cast<wxWindow*>(child_entry->pointer), proportion, flags, border);
+    else if (child_entry->kind == UiHandleKind::Sizer)
+        sizer->Add(static_cast<wxSizer*>(child_entry->pointer), proportion, flags, border);
+    else
+        return -1;
+    return 1;
+}
+
+int32_t ui_window_set_sizer(uint64_t window_handle, uint64_t sizer_handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    wxWindow* window = find_ui_window(window_handle);
+    UiHandleEntry* entry = find_ui_handle(sizer_handle, UiHandleKind::Sizer);
+    if (!window || !entry)
+        return -1;
+    window->SetSizer(static_cast<wxSizer*>(entry->pointer));
+    return 1;
+}
+
+int32_t ui_window_layout(uint64_t handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    wxWindow* window = find_ui_window(handle);
+    return window && window->Layout() ? 1 : (window ? 0 : -1);
+}
+
+int32_t ui_notebook_add_page(uint64_t notebook_handle, uint64_t page_handle,
+                             const char* label, int32_t select)
+{
+    if (!on_gui_thread() || !label)
+        return -1;
+    auto* notebook = wxDynamicCast(find_ui_window(notebook_handle), wxNotebook);
+    wxWindow* page = find_ui_window(page_handle);
+    if (!notebook || !page)
+        return -1;
+    return notebook->AddPage(page, wxString::FromUTF8(label), select != 0) ? 1 : 0;
+}
+
+int32_t ui_notebook_insert_page(uint64_t notebook_handle, uint32_t index, uint64_t page_handle,
+                                const char* label, int32_t select)
+{
+    if (!on_gui_thread() || !label)
+        return -1;
+    auto* notebook = wxDynamicCast(find_ui_window(notebook_handle), wxNotebook);
+    wxWindow* page = find_ui_window(page_handle);
+    if (!notebook || !page)
+        return -1;
+    return notebook->InsertPage(index, page, wxString::FromUTF8(label), select != 0) ? 1 : 0;
+}
+
+int32_t ui_notebook_remove_page(uint64_t notebook_handle, uint32_t index)
+{
+    if (!on_gui_thread())
+        return -1;
+    auto* notebook = wxDynamicCast(find_ui_window(notebook_handle), wxNotebook);
+    return notebook ? (notebook->RemovePage(index) ? 1 : 0) : -1;
+}
+
+int32_t ui_notebook_get_page_count(uint64_t notebook_handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    auto* notebook = wxDynamicCast(find_ui_window(notebook_handle), wxNotebook);
+    return notebook ? static_cast<int32_t>(notebook->GetPageCount()) : -1;
+}
+
+int32_t ui_notebook_set_selection(uint64_t notebook_handle, int32_t index)
+{
+    if (!on_gui_thread())
+        return -1;
+    auto* notebook = wxDynamicCast(find_ui_window(notebook_handle), wxNotebook);
+    if (!notebook || index < 0 || static_cast<size_t>(index) >= notebook->GetPageCount())
+        return -1;
+    notebook->SetSelection(static_cast<size_t>(index));
+    return 1;
+}
+
+int32_t ui_notebook_get_page_text(uint64_t notebook_handle, uint32_t index,
+                                  char* buffer, uint32_t capacity)
+{
+    if (!on_gui_thread() || !buffer || capacity == 0)
+        return -1;
+    auto* notebook = wxDynamicCast(find_ui_window(notebook_handle), wxNotebook);
+    if (!notebook || index >= notebook->GetPageCount())
+        return -1;
+    copy_utf8_to_buffer(notebook->GetPageText(index), buffer, capacity);
+    return 1;
+}
+
+uint64_t ui_menu_bar_get(uint64_t frame_handle)
+{
+    if (!on_gui_thread())
+        return 0;
+    wxWindow* window = find_ui_window(frame_handle);
+    auto* frame = wxDynamicCast(window, wxFrame);
+    return frame ? register_ui_handle(frame->GetMenuBar(), UiHandleKind::MenuBar,
+                                      g_ui_handles[frame_handle].frame) : 0;
+}
+
+uint64_t ui_menu_create(uint64_t frame_handle)
+{
+    if (!on_gui_thread() || !find_ui_window(frame_handle))
+        return 0;
+    return register_ui_handle(new wxMenu(), UiHandleKind::Menu,
+                              g_ui_handles[frame_handle].frame);
+}
+
+int32_t ui_menu_append(uint64_t menu_handle, int32_t id, const char* label,
+                       const char* help, uint32_t kind)
+{
+    if (!on_gui_thread() || !label)
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!entry)
+        return -1;
+    wxItemKind item_kind = wxITEM_NORMAL;
+    if (kind == KUA_UI_MENU_CHECK)
+        item_kind = wxITEM_CHECK;
+    else if (kind == KUA_UI_MENU_RADIO)
+        item_kind = wxITEM_RADIO;
+    else if (kind != KUA_UI_MENU_NORMAL)
+        return -1;
+    static_cast<wxMenu*>(entry->pointer)->Append(id, wxString::FromUTF8(label),
+        wxString::FromUTF8(help ? help : ""), item_kind);
+    return 1;
+}
+
+int32_t ui_menu_delete(uint64_t menu_handle, int32_t id)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    return entry && static_cast<wxMenu*>(entry->pointer)->Delete(id) ? 1 : -1;
+}
+
+int32_t ui_menu_bar_append(uint64_t menu_bar_handle, uint64_t menu_handle, const char* title)
+{
+    if (!on_gui_thread() || !title)
+        return -1;
+    UiHandleEntry* bar = find_ui_handle(menu_bar_handle, UiHandleKind::MenuBar);
+    UiHandleEntry* menu = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!bar || !menu)
+        return -1;
+    const bool ok = static_cast<wxMenuBar*>(bar->pointer)->Append(
+        static_cast<wxMenu*>(menu->pointer), wxString::FromUTF8(title));
+    return ok ? 1 : 0;
+}
+
+int32_t ui_menu_bar_remove(uint64_t menu_bar_handle, uint32_t index)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* bar = find_ui_handle(menu_bar_handle, UiHandleKind::MenuBar);
+    if (!bar)
+        return -1;
+    wxMenu* menu = static_cast<wxMenuBar*>(bar->pointer)->Remove(index);
+    return menu ? 1 : 0;
+}
+
+uint64_t ui_menu_bind(uint64_t frame_handle, int32_t id, KUA_GuiCallback callback, void* user_data)
+{
+    if (!on_gui_thread() || !callback)
+        return 0;
+    wxWindow* frame = find_ui_window(frame_handle);
+    if (!frame)
+        return 0;
+    frame->Bind(wxEVT_MENU, [callback, user_data](wxCommandEvent&) { callback(user_data); }, id);
+    uint64_t binding = g_next_ui_handle++;
+    if (binding == 0)
+        binding = g_next_ui_handle++;
+    g_menu_bindings.emplace(binding, MenuBindingEntry{frame, id});
+    return binding;
+}
+
+int32_t ui_menu_unbind(uint64_t binding)
+{
+    if (!on_gui_thread())
+        return -1;
+    const auto it = g_menu_bindings.find(binding);
+    if (it == g_menu_bindings.end())
+        return -1;
+    it->second.frame->Unbind(wxEVT_MENU, it->second.id, it->second.id);
+    g_menu_bindings.erase(it);
+    return 1;
+}
+
+uint64_t ui_aui_get_manager(uint64_t window_handle)
+{
+    if (!on_gui_thread())
+        return 0;
+    wxWindow* window = find_ui_window(window_handle);
+    if (!window)
+        return 0;
+    wxAuiManager* manager = wxAuiManager::GetManager(window);
+    return register_ui_handle(manager, UiHandleKind::AuiManager,
+                              g_ui_handles[window_handle].frame);
+}
+
+int32_t ui_aui_add_pane(uint64_t manager_handle, uint64_t window_handle,
+                        const KUA_AuiPaneOptions* options)
+{
+    if (!on_gui_thread() || !options ||
+        options->struct_size < sizeof(KUA_AuiPaneOptions) || !options->name)
+        return -1;
+    UiHandleEntry* manager_entry = find_ui_handle(manager_handle, UiHandleKind::AuiManager);
+    wxWindow* window = find_ui_window(window_handle);
+    if (!manager_entry || !window)
+        return -1;
+
+    wxAuiPaneInfo pane;
+    pane.Name(wxString::FromUTF8(options->name))
+        .Caption(wxString::FromUTF8(options->caption ? options->caption : options->name))
+        .Layer(options->layer).Row(options->row).Position(options->position);
+
+    switch (options->direction)
+    {
+    case KUA_AUI_LEFT: pane.Left(); break;
+    case KUA_AUI_RIGHT: pane.Right(); break;
+    case KUA_AUI_TOP: pane.Top(); break;
+    case KUA_AUI_BOTTOM: pane.Bottom(); break;
+    case KUA_AUI_CENTER: pane.CenterPane(); break;
+    case KUA_AUI_FLOATING: pane.Float(); break;
+    default: return -1;
+    }
+
+    if (options->best_width > 0 && options->best_height > 0)
+        pane.BestSize(options->best_width, options->best_height);
+    if (options->min_width > 0 && options->min_height > 0)
+        pane.MinSize(options->min_width, options->min_height);
+
+    pane.CloseButton((options->flags & KUA_AUI_CLOSE_BUTTON) != 0)
+        .PinButton((options->flags & KUA_AUI_PIN_BUTTON) != 0)
+        .CaptionVisible((options->flags & KUA_AUI_CAPTION_VISIBLE) != 0)
+        .PaneBorder((options->flags & KUA_AUI_PANE_BORDER) != 0)
+        .Movable((options->flags & KUA_AUI_MOVABLE) != 0)
+        .Resizable((options->flags & KUA_AUI_RESIZABLE) != 0)
+        .Floatable((options->flags & KUA_AUI_FLOATABLE) != 0)
+        .Dockable((options->flags & KUA_AUI_DOCKABLE) != 0);
+
+    return static_cast<wxAuiManager*>(manager_entry->pointer)->AddPane(window, pane) ? 1 : 0;
+}
+
+int32_t ui_aui_detach_pane(uint64_t manager_handle, uint64_t window_handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* manager = find_ui_handle(manager_handle, UiHandleKind::AuiManager);
+    wxWindow* window = find_ui_window(window_handle);
+    if (!manager || !window)
+        return -1;
+    return static_cast<wxAuiManager*>(manager->pointer)->DetachPane(window) ? 1 : 0;
+}
+
+int32_t ui_aui_update(uint64_t manager_handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* manager = find_ui_handle(manager_handle, UiHandleKind::AuiManager);
+    if (!manager)
+        return -1;
+    static_cast<wxAuiManager*>(manager->pointer)->Update();
+    return 1;
+}
+
+uint64_t ui_properties_get_panel(uint64_t frame_handle)
+{
+    if (!on_gui_thread())
+        return 0;
+    auto* frame = wxDynamicCast(find_ui_window(frame_handle), EDA_DRAW_FRAME);
+    if (!frame)
+        return 0;
+    PROPERTIES_PANEL* panel = frame->GetPropertiesPanel();
+    return panel ? register_ui_handle(panel, UiHandleKind::Window,
+                                      g_ui_handles[frame_handle].frame) : 0;
+}
+
+uint64_t ui_properties_get_grid(uint64_t panel_handle)
+{
+    if (!on_gui_thread())
+        return 0;
+    wxWindow* window = find_ui_window(panel_handle);
+    auto* panel = wxDynamicCast(window, PROPERTIES_PANEL);
+    return panel ? register_ui_handle(panel->GetPropertyGrid(), UiHandleKind::PropertyGrid,
+                                      g_ui_handles[panel_handle].frame) : 0;
+}
+
+int32_t ui_property_grid_append_string(uint64_t grid_handle, const char* label,
+                                       const char* name, const char* value)
+{
+    if (!on_gui_thread() || !label || !name || !value)
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(grid_handle, UiHandleKind::PropertyGrid);
+    if (!entry)
+        return -1;
+    auto* grid = static_cast<wxPropertyGrid*>(entry->pointer);
+    grid->Append(new wxStringProperty(wxString::FromUTF8(label), wxString::FromUTF8(name),
+                                      wxString::FromUTF8(value)));
+    return 1;
+}
+
+int32_t ui_property_grid_append_bool(uint64_t grid_handle, const char* label,
+                                     const char* name, int32_t value)
+{
+    if (!on_gui_thread() || !label || !name)
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(grid_handle, UiHandleKind::PropertyGrid);
+    if (!entry)
+        return -1;
+    static_cast<wxPropertyGrid*>(entry->pointer)->Append(
+        new wxBoolProperty(wxString::FromUTF8(label), wxString::FromUTF8(name), value != 0));
+    return 1;
+}
+
+int32_t ui_property_grid_append_int(uint64_t grid_handle, const char* label,
+                                    const char* name, int64_t value)
+{
+    if (!on_gui_thread() || !label || !name ||
+        value < std::numeric_limits<long>::min() || value > std::numeric_limits<long>::max())
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(grid_handle, UiHandleKind::PropertyGrid);
+    if (!entry)
+        return -1;
+    static_cast<wxPropertyGrid*>(entry->pointer)->Append(
+        new wxIntProperty(wxString::FromUTF8(label), wxString::FromUTF8(name),
+                          static_cast<long>(value)));
+    return 1;
+}
+
+int32_t ui_property_grid_append_float(uint64_t grid_handle, const char* label,
+                                      const char* name, double value)
+{
+    if (!on_gui_thread() || !label || !name || !std::isfinite(value))
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(grid_handle, UiHandleKind::PropertyGrid);
+    if (!entry)
+        return -1;
+    static_cast<wxPropertyGrid*>(entry->pointer)->Append(
+        new wxFloatProperty(wxString::FromUTF8(label), wxString::FromUTF8(name), value));
+    return 1;
+}
+
+int32_t ui_property_grid_set_string(uint64_t grid_handle, const char* name, const char* value)
+{
+    if (!on_gui_thread() || !name || !value)
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(grid_handle, UiHandleKind::PropertyGrid);
+    if (!entry)
+        return -1;
+    static_cast<wxPropertyGrid*>(entry->pointer)->SetPropertyValue(
+        wxString::FromUTF8(name), wxString::FromUTF8(value));
+    return 1;
+}
+
+int32_t ui_property_grid_get_string(uint64_t grid_handle, const char* name,
+                                    char* buffer, uint32_t capacity)
+{
+    if (!on_gui_thread() || !name || !buffer || capacity == 0)
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(grid_handle, UiHandleKind::PropertyGrid);
+    if (!entry)
+        return -1;
+    auto* grid = static_cast<wxPropertyGrid*>(entry->pointer);
+    wxPGProperty* property = grid->GetPropertyByName(wxString::FromUTF8(name));
+    if (!property)
+        return -1;
+    copy_utf8_to_buffer(grid->GetPropertyValueAsString(property), buffer, capacity);
+    return 1;
+}
+
+int32_t ui_property_grid_delete(uint64_t grid_handle, const char* name)
+{
+    if (!on_gui_thread() || !name)
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(grid_handle, UiHandleKind::PropertyGrid);
+    if (!entry)
+        return -1;
+    return static_cast<wxPropertyGrid*>(entry->pointer)->DeleteProperty(
+        wxString::FromUTF8(name)) ? 1 : 0;
+}
+
 bool on_gui_thread()
 {
     return wxIsMainThread() && g_gui_callbacks_enabled.load(std::memory_order_acquire);
@@ -115,6 +785,7 @@ void destroy_overlays_for_frame(void* frame)
         it = g_overlays.erase(it);
     }
     g_editor_frames.erase(frame);
+    forget_ui_handles_for_frame(frame);
 }
 
 void destroy_all_overlays()
@@ -129,6 +800,8 @@ void destroy_all_overlays()
     }
     g_overlays.clear();
     g_editor_frames.clear();
+    g_ui_handles.clear();
+    g_menu_bindings.clear();
 }
 #endif
 
@@ -178,6 +851,44 @@ int32_t overlay_set_style(uint64_t, double, double, double, double, double, doub
 int32_t overlay_line(uint64_t, double, double, double, double) { return -1; }
 int32_t overlay_circle(uint64_t, double, double, double) { return -1; }
 int32_t overlay_rectangle(uint64_t, double, double, double, double) { return -1; }
+uint64_t ui_window_get_handle(void*) { return 0; }
+uint64_t ui_window_create(uint64_t, uint32_t, int32_t, const char*, int32_t) { return 0; }
+int32_t ui_window_destroy(uint64_t) { return -1; }
+int32_t ui_window_show(uint64_t, int32_t) { return -1; }
+int32_t ui_window_get_children(uint64_t, uint64_t*, uint32_t) { return -1; }
+int32_t ui_window_get_class_name(uint64_t, char*, uint32_t) { return -1; }
+int32_t ui_window_set_text(uint64_t, const char*) { return -1; }
+uint64_t ui_sizer_create(uint32_t, int32_t, int32_t, int32_t, int32_t, int32_t) { return 0; }
+int32_t ui_sizer_add(uint64_t, uint64_t, int32_t, int32_t, int32_t) { return -1; }
+int32_t ui_window_set_sizer(uint64_t, uint64_t) { return -1; }
+int32_t ui_window_layout(uint64_t) { return -1; }
+int32_t ui_notebook_add_page(uint64_t, uint64_t, const char*, int32_t) { return -1; }
+int32_t ui_notebook_insert_page(uint64_t, uint32_t, uint64_t, const char*, int32_t) { return -1; }
+int32_t ui_notebook_remove_page(uint64_t, uint32_t) { return -1; }
+int32_t ui_notebook_get_page_count(uint64_t) { return -1; }
+int32_t ui_notebook_set_selection(uint64_t, int32_t) { return -1; }
+int32_t ui_notebook_get_page_text(uint64_t, uint32_t, char*, uint32_t) { return -1; }
+uint64_t ui_menu_bar_get(uint64_t) { return 0; }
+uint64_t ui_menu_create(uint64_t) { return 0; }
+int32_t ui_menu_append(uint64_t, int32_t, const char*, const char*, uint32_t) { return -1; }
+int32_t ui_menu_delete(uint64_t, int32_t) { return -1; }
+int32_t ui_menu_bar_append(uint64_t, uint64_t, const char*) { return -1; }
+int32_t ui_menu_bar_remove(uint64_t, uint32_t) { return -1; }
+uint64_t ui_menu_bind(uint64_t, int32_t, KUA_GuiCallback, void*) { return 0; }
+int32_t ui_menu_unbind(uint64_t) { return -1; }
+uint64_t ui_aui_get_manager(uint64_t) { return 0; }
+int32_t ui_aui_add_pane(uint64_t, uint64_t, const KUA_AuiPaneOptions*) { return -1; }
+int32_t ui_aui_detach_pane(uint64_t, uint64_t) { return -1; }
+int32_t ui_aui_update(uint64_t) { return -1; }
+uint64_t ui_properties_get_panel(uint64_t) { return 0; }
+uint64_t ui_properties_get_grid(uint64_t) { return 0; }
+int32_t ui_property_grid_append_string(uint64_t, const char*, const char*, const char*) { return -1; }
+int32_t ui_property_grid_append_bool(uint64_t, const char*, const char*, int32_t) { return -1; }
+int32_t ui_property_grid_append_int(uint64_t, const char*, const char*, int64_t) { return -1; }
+int32_t ui_property_grid_append_float(uint64_t, const char*, const char*, double) { return -1; }
+int32_t ui_property_grid_set_string(uint64_t, const char*, const char*) { return -1; }
+int32_t ui_property_grid_get_string(uint64_t, const char*, char*, uint32_t) { return -1; }
+int32_t ui_property_grid_delete(uint64_t, const char*) { return -1; }
 #else
 uint64_t overlay_create(void* frame, void* canvas, void* view)
 {
@@ -306,6 +1017,44 @@ KUA_HostApi make_host_api()
     host.overlay_line = &overlay_line;
     host.overlay_circle = &overlay_circle;
     host.overlay_rectangle = &overlay_rectangle;
+    host.ui_window_get_handle = &ui_window_get_handle;
+    host.ui_window_create = &ui_window_create;
+    host.ui_window_destroy = &ui_window_destroy;
+    host.ui_window_show = &ui_window_show;
+    host.ui_window_get_children = &ui_window_get_children;
+    host.ui_window_get_class_name = &ui_window_get_class_name;
+    host.ui_window_set_text = &ui_window_set_text;
+    host.ui_sizer_create = &ui_sizer_create;
+    host.ui_sizer_add = &ui_sizer_add;
+    host.ui_window_set_sizer = &ui_window_set_sizer;
+    host.ui_window_layout = &ui_window_layout;
+    host.ui_notebook_add_page = &ui_notebook_add_page;
+    host.ui_notebook_insert_page = &ui_notebook_insert_page;
+    host.ui_notebook_remove_page = &ui_notebook_remove_page;
+    host.ui_notebook_get_page_count = &ui_notebook_get_page_count;
+    host.ui_notebook_set_selection = &ui_notebook_set_selection;
+    host.ui_notebook_get_page_text = &ui_notebook_get_page_text;
+    host.ui_menu_bar_get = &ui_menu_bar_get;
+    host.ui_menu_create = &ui_menu_create;
+    host.ui_menu_append = &ui_menu_append;
+    host.ui_menu_delete = &ui_menu_delete;
+    host.ui_menu_bar_append = &ui_menu_bar_append;
+    host.ui_menu_bar_remove = &ui_menu_bar_remove;
+    host.ui_menu_bind = &ui_menu_bind;
+    host.ui_menu_unbind = &ui_menu_unbind;
+    host.ui_aui_get_manager = &ui_aui_get_manager;
+    host.ui_aui_add_pane = &ui_aui_add_pane;
+    host.ui_aui_detach_pane = &ui_aui_detach_pane;
+    host.ui_aui_update = &ui_aui_update;
+    host.ui_properties_get_panel = &ui_properties_get_panel;
+    host.ui_properties_get_grid = &ui_properties_get_grid;
+    host.ui_property_grid_append_string = &ui_property_grid_append_string;
+    host.ui_property_grid_append_bool = &ui_property_grid_append_bool;
+    host.ui_property_grid_append_int = &ui_property_grid_append_int;
+    host.ui_property_grid_append_float = &ui_property_grid_append_float;
+    host.ui_property_grid_set_string = &ui_property_grid_set_string;
+    host.ui_property_grid_get_string = &ui_property_grid_get_string;
+    host.ui_property_grid_delete = &ui_property_grid_delete;
     return host;
 }
 
@@ -472,6 +1221,7 @@ public:
             context.canvas = canvas;
             context.view = canvas ? canvas->GetView() : nullptr;
             g_editor_frames[window] = {canvas, static_cast<KIGFX::VIEW*>(context.view)};
+            register_ui_handle(window, UiHandleKind::Window, window);
 #endif
             notify_window_created(context);
         }
