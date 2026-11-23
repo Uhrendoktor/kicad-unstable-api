@@ -94,6 +94,7 @@ def make_link_command(
     output_file: Path,
     editor: str,
     abi_tag: str,
+    gal_library: Path,
 ) -> list[str]:
     compiler, flags = compiler_and_flags(entry)
     project_include = Path(__file__).resolve().parents[1] / "include"
@@ -107,7 +108,16 @@ def make_link_command(
         f'-DKUA_KICAD_ABI_TAG="{abi_tag}"',
         "-DKUA_BUILD_EDITOR_PCB" if editor == "pcbnew" else "-DKUA_BUILD_EDITOR_SCHEMATIC",
     ])
-    return [compiler, *flags, "-shared", str(source_file), "-ldl", "-o", str(output_file)]
+    # KiCad loads this module eagerly before it loads the original KIFACE.
+    # Therefore every KiCad symbol referenced directly by the proxy must be
+    # resolvable at dlopen(RTLD_NOW) time. GAL's VIEW/VIEW_OVERLAY methods live
+    # in libkigal, which the editor launcher itself does not load.
+    return [
+        compiler, *flags, "-shared", str(source_file),
+        str(gal_library),
+        "-Wl,-rpath,$ORIGIN/../common/gal",
+        "-ldl", "-o", str(output_file),
+    ]
 
 
 def main() -> int:
@@ -156,12 +166,24 @@ def main() -> int:
         )
 
         entries = json.loads(compile_db.read_text(encoding="utf-8"))
+        gal_candidates = list((build_root / "common" / "gal").glob("libkigal.so"))
+        if not gal_candidates:
+            gal_candidates = list((build_root / "common" / "gal").glob("libkigal.so.*"))
+        if not gal_candidates:
+            raise ValueError(
+                "KiCad libkigal was not built. Build the 'gal' target first: "
+                "cmake --build <kicad-build> --target gal"
+            )
+        gal_library = gal_candidates[0].resolve()
+        if not gal_library.is_file():
+            raise ValueError(f"KiCad GAL library is not a regular file: {gal_library}")
+
         output_dir = args.output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
         for editor, relative_source in EDITOR_SOURCES.items():
             entry = resolve_entry(entries, relative_source)
             output = output_dir / f"_{editor}.kiface"
-            command = make_link_command(entry, proxy_source, output, editor, head)
+            command = make_link_command(entry, proxy_source, output, editor, head, gal_library)
             print(f"[{editor}] compiler command from {relative_source}")
             if args.dry_run:
                 print(shlex.join(command))
@@ -174,7 +196,16 @@ def main() -> int:
             ).stdout
             if not any(line.rstrip().endswith(" KIFACE_1") for line in symbols.splitlines()):
                 raise ValueError(f"{output} does not export KIFACE_1.")
-            print(f"PASS: {output} exports KIFACE_1 (KiCad {head}).")
+
+            dynamic = subprocess.run(
+                ["readelf", "-d", str(output)],
+                check=True, capture_output=True, text=True,
+            ).stdout
+            if "libkigal.so" not in dynamic:
+                raise ValueError(f"{output} does not declare a DT_NEEDED dependency on KiCad libkigal.")
+            if "$ORIGIN/../common/gal" not in dynamic:
+                raise ValueError(f"{output} is missing its relative KiCad build-tree GAL RUNPATH.")
+            print(f"PASS: {output} exports KIFACE_1 and loads KiCad libkigal (KiCad {head}).")
 
     except (OSError, subprocess.CalledProcessError, ValueError, KeyError, json.JSONDecodeError) as error:
         print(f"real KiCad proxy build failed: {error}", file=sys.stderr)
