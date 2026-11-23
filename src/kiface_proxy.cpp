@@ -143,6 +143,7 @@ bool g_window_event_filter_installed = false;
 
 bool on_gui_thread();
 void menu_event_thunk(wxCommandEvent& event);
+void forget_ui_handles_for_frame(void* frame);
 
 uint64_t register_ui_handle(void* pointer, UiHandleKind kind, void* frame,
                             wxWindow* owner_window = nullptr)
@@ -230,6 +231,11 @@ void install_ui_window_destroy_hook(wxWindow* window)
 
     window->Bind(wxEVT_DESTROY, [window](wxWindowDestroyEvent& event) {
         invalidate_ui_window(window);
+        if (g_editor_frames.find(window) != g_editor_frames.end())
+        {
+            g_editor_frames.erase(window);
+            forget_ui_handles_for_frame(window);
+        }
         event.Skip();
     });
 }
@@ -1042,8 +1048,6 @@ void destroy_overlays_for_frame(void* frame)
             state.canvas->Refresh(false);
         it = g_overlays.erase(it);
     }
-    g_editor_frames.erase(frame);
-    forget_ui_handles_for_frame(frame);
 }
 
 void destroy_all_overlays()
