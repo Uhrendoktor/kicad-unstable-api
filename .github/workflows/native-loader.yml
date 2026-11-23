@@ -31,7 +31,7 @@ jobs:
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
   real-kicad-linux:
-    name: Pinned KiCad production-header compile
+    name: Pinned KiCad production build and live-editor smoke
     runs-on: ubuntu-24.04
     container: debian:trixie
     steps:
@@ -57,7 +57,7 @@ jobs:
           git -C /tmp/kicad-source remote add origin https://github.com/KiCad/kicad-source-mirror.git
           git -C /tmp/kicad-source fetch --depth=1 origin b7066f886375b186ca8fa469de3a6382f6bba400
           git -C /tmp/kicad-source checkout --detach FETCH_HEAD
-      - name: Configure matching KiCad build tree (no full KiCad compile)
+      - name: Configure matching KiCad build tree
         run: |
           cmake -S /tmp/kicad-source -B /tmp/kicad-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
