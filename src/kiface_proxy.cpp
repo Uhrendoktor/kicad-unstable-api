@@ -393,11 +393,13 @@ uint64_t ui_window_get_handle(void* borrowed_window)
     if (!on_gui_thread() || !borrowed_window)
         return 0;
 
+    auto* window = static_cast<wxWindow*>(borrowed_window);
     for (const auto& [frame, state] : g_editor_frames)
     {
         (void)state;
-        if (frame == borrowed_window)
-            return register_ui_window(static_cast<wxWindow*>(frame), frame);
+        auto* editor_frame = static_cast<wxWindow*>(frame);
+        if (window_belongs_to_editor(window, editor_frame))
+            return register_ui_window(window, frame);
     }
 
     return 0;
@@ -923,11 +925,23 @@ uint64_t ui_aui_get_manager(uint64_t window_handle)
     if (!on_gui_thread())
         return 0;
     wxWindow* window = find_ui_window(window_handle);
-    if (!window)
+    UiHandleEntry* window_entry = find_ui_handle(window_handle, UiHandleKind::Window);
+    if (!window || !window_entry || !window_entry->frame)
         return 0;
+
     wxAuiManager* manager = wxAuiManager::GetManager(window);
+    wxWindow* managed_window = manager ? manager->GetManagedWindow() : nullptr;
+    auto* editor_frame = static_cast<wxWindow*>(window_entry->frame);
+    if (!manager || !managed_window ||
+        !window_belongs_to_editor(managed_window, editor_frame))
+        return 0;
+
+    // The manager is tied to its managed window, which may be a child of the
+    // KiCad frame. Ensure native destruction invalidates this handle even when
+    // that managed window was never wrapped through another KUA call.
+    install_ui_window_destroy_hook(managed_window);
     return register_ui_handle(manager, UiHandleKind::AuiManager,
-                              g_ui_handles[window_handle].frame);
+                              window_entry->frame, managed_window);
 }
 
 int32_t ui_aui_add_pane(uint64_t manager_handle, uint64_t window_handle,
