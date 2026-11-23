@@ -1,6 +1,6 @@
 # Native API capability catalogue
 
-This summary maps the public/in-process facilities needed by KiCad Blocks, JLCPCB Interface and kicad-clippy. The full proposed C API call catalogue, native window/window-group API, docking API, property-provider design, object model and priority matrix are in [api-capability-catalog.md](api-capability-catalog.md). Native source baseline for this summary: KiCad b7066f886375b186ca8fa469de3a6382f6bba400. Exact headers, exported symbols and object layout must be checked against each supported KiCad build.
+This summary maps the public/in-process facilities needed by KiCad Blocks, JLCPCB Interface and kicad-clippy. The full proposed C API call catalogue, native window/window-group API, docking API, native wxWindow/menu/AUI/notebook/property-grid binding catalogue, object model and priority matrix are in [api-capability-catalog.md](api-capability-catalog.md). Native source baseline for this summary: KiCad b7066f886375b186ca8fa469de3a6382f6bba400. Exact headers, exported symbols and object layout must be checked against each supported KiCad build.
 
 ## The loader gives process access, not universal symbol access
 
@@ -105,10 +105,12 @@ The modal Eeschema Symbol Properties and PCB Footprint Properties dialogs each c
 | Docking | Native wxAuiManager methods; plugin owns pane/window |
 | Properties | Native wxPropertyGrid rows and wxNotebook pages; plugin owns values/pages |
 | Project configuration | KiCad project/settings APIs and project-local profile files |
-| Fixes | SCH_COMMIT/BOARD_COMMIT, native operations, commit/rollback/re-run checks |
+| Native edit primitives | Existing SCH_COMMIT/BOARD_COMMIT calls; plugin chooses transaction and validation logic |
 | DRC/ ERC | Existing native engines and IPC/CLI reports; do not duplicate KiCad's validators |
 
 ## Project-by-project native UI mapping
+
+The following lists describe UI each plugin owns and creates itself using KUA's native wxWidgets/KiCad bindings; they are not host-owned pages or workflows.
 
 ### kicad-blocks
 - Blocks Library panel: searchable reusable block/implementation list.

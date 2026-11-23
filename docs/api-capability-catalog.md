@@ -70,7 +70,9 @@ Expose wxWidgets windows and controls so plugins can create native subwindows in
 - `UI.Window.Show(handle, visible)`, `UI.Window.Raise(handle)`, `UI.Window.SetFocus(handle)`
 - `UI.Window.Enable(handle, enabled)`, `UI.Window.SetTitle(handle, title)`
 - `UI.Window.SetSize(handle, rect)`, `UI.Window.SetPosition(handle, point)`
+- `UI.Window.GetTopLevelWindows()` / `UI.Window.GetTopLevelWindows(editor)`
 - `UI.Window.GetParent/GetChildren/GetTopLevelParent(handle)`
+- `UI.Window.FindTopLevelByClass(wx_class_name)`
 - `UI.Window.GetName/GetId/GetClassName(handle)`
 - `UI.Window.FindChildByName(parent, name, recursive)`
 - `UI.Window.FindChildrenByClass(parent, wx_class_name, recursive)`
@@ -161,6 +163,7 @@ Two native controls must be distinguished.
 Pinned KiCad headers expose `EDA_DRAW_FRAME::GetPropertiesPanel()`, `PROPERTIES_PANEL::GetPropertyGrid()` and `PROPERTIES_PANEL::UpdateData()`. Bind these plus native wxPropertyGrid methods:
 
 - `Properties.GetPanel/GetGrid/UpdateData(...)`
+- `PropertyGrid.CreateProperty(kind, label, name, initial_value)` (wxStringProperty, wxIntProperty, wxFloatProperty, wxBoolProperty, wxEnumProperty, wxFileProperty, wxDirProperty, wxDateProperty, wxColourProperty, wxFontProperty, etc.)
 - `PropertyGrid.Append/Insert/AppendIn(grid, property_spec)`
 - `PropertyGrid.DeleteProperty/Clear(grid, name)`
 - `PropertyGrid.GetValue/SetValue(grid, name, value)`

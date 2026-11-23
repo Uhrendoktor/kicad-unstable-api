@@ -105,21 +105,23 @@ The C ABI should expose these groups using versioned structs, fixed-width scalar
 
 ## Project-specific acceptance scenarios
 
+These are downstream-consumer acceptance tests: KUA supplies the native calls, while each project implements its own pages, workflows and business logic in its own repository. They are not KUA feature implementations.
+
 ### kicad-blocks
-1. Open the Functional Block Library as a registered workspace page.
+1. Open the plugin-owned Functional Block Library window/page using native wxWindow/AUI/notebook bindings.
 2. Search/select a block and show facade plus implementation preview.
 3. Place a facade using the native Eeschema move tool; verify cursor-following, grid/magnetic snap, confirm, Escape rollback and one-step undo.
 4. Change instance profile/variant/typed parameters through a contextual provider; verify a single undoable update.
 5. Open the implementation sheet and navigate/select the corresponding instance.
 6. Apply a PCB layout through the PCB editor's native move/transaction path.
-7. Verify the page survives selection changes, project switches and multiple open editor frames.
+7. Verify plugin-owned UI remains correct across selection changes, project switches and multiple open editor frames.
 
 ### kicad-jlcpcb-interface
-1. Show project-wide component catalogue/stock/cost overview in one workspace page.
-2. Select a schematic symbol and display its supplier/MPN/LCSC contextual page.
+1. Show the plugin-owned project catalogue/stock/cost UI.
+2. Select a schematic symbol and display the plugin-owned supplier/MPN/LCSC page, using native selection and properties bindings.
 3. Update catalogue fields without changing library identity, graphics, pin map or unrelated fields.
 4. Add a component and hand it to native cursor-attached placement; verify snapping, Escape and undo.
-5. Preview symbol, footprint and STEP/3D data in tabs; preview must not mutate the design.
+5. Preview symbol, footprint and STEP/3D data in plugin-owned notebook tabs; preview must not mutate the design.
 6. Select a catalogue row and navigate to the exact symbol instance including sheet path.
 
 ### kicad-clippy
@@ -127,9 +129,9 @@ The C ABI should expose these groups using versioned structs, fixed-width scalar
 2. Pan/zoom and confirm overlay geometry remains registered to document coordinates.
 3. Passive overlay: click/select underlying KiCad objects normally.
 4. Hover overlay: show explanation without consuming normal selection.
-5. Interactive marker: click opens the corresponding finding/fix page; keyboard focus and Escape work.
+5. Interactive marker: click opens the plugin-owned finding/fix window/page; keyboard focus and Escape work.
 6. Navigate to primary and related objects across hierarchical sheets and PCB.
-7. Edit component intent in the contextual property page and persist metadata.
+7. Edit component intent in the plugin-owned property page and persist metadata.
 8. Preview a fix, apply through SCH_COMMIT/BOARD_COMMIT, undo it, and rerun lint/ERC/DRC to verify.
 9. Close/reopen the project and verify overlays are reconstructed from diagnostics, not serialized into the schematic or board.
 

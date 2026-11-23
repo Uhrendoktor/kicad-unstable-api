@@ -153,13 +153,13 @@ Each plugin needs native windows. Bind wxDialog/wxFrame/wxWindow creation and pa
 | Extension level | Desired behavior | Current feasibility |
 |---|---|---|
 | KiCad custom fields | Persist supplier, block and component-intent values in native symbol/footprint fields | Existing data model; host CRUD and safe transactions needed |
-| Shared context inspector | Plugin pages update from current selection; one tab host shared by all plugins | KUA workspace and provider registry needed; recommended first |
+| Plugin-owned contextual UI | Each plugin creates its own context window/page and updates it from native selection notifications | Expose wxWindow/wxNotebook, selection and object bindings; UI stays in plugin |
 | Modal Symbol/Footprint Properties tabs | Add a plugin page to the existing native dialog notebook | Both dialogs already contain wxNotebook children; bind child traversal + wxNotebook AddPage/InsertPage |
 | Persistent side Properties panel | Add plugin-owned rows/categories to wxPropertyGrid | Existing GetPropertiesPanel/GetPropertyGrid and wxPropertyGrid APIs; bind these methods |
 
 ### General API call catalogue
 
-The full proposed method list is in [api-capability-catalog.md](api-capability-catalog.md). It covers lifecycle/session, windows and docking, workspace pages, property providers, documents/objects, schematic and PCB models, selection/navigation, libraries, overlays/coordinates, tools/input, transactions, diagnostics/fixes, ERC/DRC/netlists, background tasks, settings and file dialogs.
+The full proposed method list is in [api-capability-catalog.md](api-capability-catalog.md). It covers lifecycle/session, windows and docking, plugin-owned windows/menus/notebook pages/property-grid rows, documents/objects, schematic and PCB models, selection/navigation, libraries, overlays/coordinates, tools/input, transactions, diagnostics/fixes, ERC/DRC/netlists, background tasks, settings and file dialogs.
 
 ## 6. Priority
 
@@ -172,7 +172,7 @@ P1:
 4. GAL view discovery and transient VIEW_OVERLAY drawing.
 5. Passive/hover/interactive event routing.
 6. Eeschema native move handoff with real snapping and undo/cancel.
-7. Shared dockable pane and tab-provider registry.
+7. Bind native wxWindow/menu/AUI/notebook/property-grid calls; plugins create their own UI.
 
 P2:
 8. Native window/menu/AUI/notebook/property-grid bindings, with plugin-owned UI and page lifecycle.
