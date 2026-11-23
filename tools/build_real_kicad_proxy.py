@@ -59,7 +59,9 @@ def compiler_and_flags(entry: dict[str, Any]) -> tuple[str, list[str]]:
     if compiler_index is None:
         raise ValueError(f"Could not identify a C++ compiler in compile command: {args[:5]}")
     compiler = args[compiler_index]
-    source = Path(entry["file"]).resolve()
+    directory = Path(entry["directory"])
+    raw_source = Path(entry["file"])
+    source = (raw_source if raw_source.is_absolute() else directory / raw_source).resolve()
     flags: list[str] = []
     skip_next = False
     discard_with_value = {"-o", "-MF", "-MT", "-MQ", "-MJ"}
@@ -78,6 +80,7 @@ def compiler_and_flags(entry: dict[str, Any]) -> tuple[str, list[str]]:
             continue
         try:
             candidate = Path(arg)
+            candidate = candidate if candidate.is_absolute() else directory / candidate
             if not arg.startswith("-") and candidate.resolve() == source:
                 continue
         except (OSError, ValueError):
