@@ -119,12 +119,23 @@ struct UiHandleEntry
     wxWindow* owner_window{};
 };
 
+struct KuaMenuEventHandler
+{
+    KUA_GuiCallback callback{};
+    void* user_data{};
+
+    void on_menu(wxCommandEvent&)
+    {
+        if (callback)
+            callback(user_data);
+    }
+};
+
 struct MenuBindingEntry
 {
     wxWindow* frame{};
     int id{};
-    KUA_GuiCallback callback{};
-    void* user_data{};
+    std::unique_ptr<KuaMenuEventHandler> handler;
 };
 
 struct WindowObserverEntry
@@ -142,7 +153,6 @@ uint64_t g_next_ui_handle = 1;
 bool g_window_event_filter_installed = false;
 
 bool on_gui_thread();
-void menu_event_thunk(wxCommandEvent& event);
 void forget_ui_handles_for_frame(void* frame);
 
 uint64_t register_ui_handle(void* pointer, UiHandleKind kind, void* frame,
@@ -193,7 +203,8 @@ void remove_menu_bindings_for_window(wxWindow* frame)
     {
         if (it->second.frame == frame)
         {
-            frame->Unbind(wxEVT_MENU, &menu_event_thunk, it->second.id, it->second.id);
+            frame->Unbind(wxEVT_MENU, &KuaMenuEventHandler::on_menu,
+                          it->second.handler.get(), it->second.id, it->second.id);
             it = g_menu_bindings.erase(it);
         }
         else
@@ -288,26 +299,6 @@ bool window_belongs_to_editor(wxWindow* window, wxWindow* editor_frame)
             return true;
     }
     return false;
-}
-
-void menu_event_thunk(wxCommandEvent& event)
-{
-    auto* frame = dynamic_cast<wxWindow*>(event.GetEventObject());
-    if (!frame)
-        return;
-
-    for (const auto& [binding, entry] : g_menu_bindings)
-    {
-        (void)binding;
-        if (entry.frame == frame && entry.id == event.GetId())
-        {
-            const KUA_GuiCallback callback = entry.callback;
-            void* user_data = entry.user_data;
-            if (callback)
-                callback(user_data);
-            return;
-        }
-    }
 }
 
 class KuaWindowEventFilter final : public wxEventFilter
@@ -797,11 +788,15 @@ uint64_t ui_menu_bind(uint64_t frame_handle, int32_t id, KUA_GuiCallback callbac
             return 0;
     }
 
-    frame->Bind(wxEVT_MENU, &menu_event_thunk, id, id);
+    auto handler = std::make_unique<KuaMenuEventHandler>();
+    handler->callback = callback;
+    handler->user_data = user_data;
+    frame->Bind(wxEVT_MENU, &KuaMenuEventHandler::on_menu, handler.get(), id, id);
+
     uint64_t binding = g_next_ui_handle++;
     if (binding == 0)
         binding = g_next_ui_handle++;
-    g_menu_bindings.emplace(binding, MenuBindingEntry{frame, id, callback, user_data});
+    g_menu_bindings.emplace(binding, MenuBindingEntry{frame, id, std::move(handler)});
     return binding;
 }
 
@@ -812,8 +807,8 @@ int32_t ui_menu_unbind(uint64_t binding)
     const auto it = g_menu_bindings.find(binding);
     if (it == g_menu_bindings.end())
         return -1;
-    if (!it->second.frame->Unbind(wxEVT_MENU, &menu_event_thunk,
-                                  it->second.id, it->second.id))
+    if (!it->second.frame->Unbind(wxEVT_MENU, &KuaMenuEventHandler::on_menu,
+                                  it->second.handler.get(), it->second.id, it->second.id))
         return -1;
     g_menu_bindings.erase(it);
     return 1;
