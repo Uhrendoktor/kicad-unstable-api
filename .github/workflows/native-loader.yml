@@ -83,7 +83,7 @@ jobs:
         run: cmake --build /tmp/kicad-build --parallel 2 --target eeschema pcbnew
       - name: Build live-editor GAL smoke extension
         run: |
-          cmake -S . -B build/smoke-extension -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+          cmake -S . -B build/smoke-extension -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DKUA_SMOKE_WITH_WX=ON
           cmake --build build/smoke-extension --target kua_real_smoke_extension --parallel
       - name: Run real Eeschema and PCB Editor GAL smoke test
         run: |
