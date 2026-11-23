@@ -336,12 +336,10 @@ int32_t ui_window_set_text(uint64_t handle, const char* text)
     wxWindow* window = find_ui_window(handle);
     if (!window)
         return -1;
-    if (wxDynamicCast(window, wxTopLevelWindow))
-        wxDynamicCast(window, wxTopLevelWindow)->SetTitle(wxString::FromUTF8(text));
-    else if (wxDynamicCast(window, wxControl))
-        wxDynamicCast(window, wxControl)->SetLabel(wxString::FromUTF8(text));
+    if (auto* top_level = dynamic_cast<wxTopLevelWindow*>(window))
+        top_level->SetTitle(wxString::FromUTF8(text));
     else
-        return -1;
+        window->SetLabel(wxString::FromUTF8(text));
     return 1;
 }
 
@@ -392,6 +390,7 @@ int32_t ui_window_set_sizer(uint64_t window_handle, uint64_t sizer_handle)
     if (!window || !entry)
         return -1;
     window->SetSizer(static_cast<wxSizer*>(entry->pointer));
+    entry->frame = g_ui_handles[window_handle].frame;
     return 1;
 }
 
@@ -558,7 +557,7 @@ int32_t ui_menu_unbind(uint64_t binding)
     const auto it = g_menu_bindings.find(binding);
     if (it == g_menu_bindings.end())
         return -1;
-    it->second.frame->Unbind(wxEVT_MENU, it->second.id, it->second.id);
+    it->second.frame->Disconnect(it->second.id, it->second.id, wxEVT_MENU);
     g_menu_bindings.erase(it);
     return 1;
 }
@@ -753,8 +752,12 @@ int32_t ui_property_grid_delete(uint64_t grid_handle, const char* name)
     UiHandleEntry* entry = find_ui_handle(grid_handle, UiHandleKind::PropertyGrid);
     if (!entry)
         return -1;
-    return static_cast<wxPropertyGrid*>(entry->pointer)->DeleteProperty(
-        wxString::FromUTF8(name)) ? 1 : 0;
+    auto* grid = static_cast<wxPropertyGrid*>(entry->pointer);
+    const wxString property_name = wxString::FromUTF8(name);
+    if (!grid->GetProperty(property_name))
+        return 0;
+    grid->DeleteProperty(property_name);
+    return 1;
 }
 
 bool on_gui_thread()
