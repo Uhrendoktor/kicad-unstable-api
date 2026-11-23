@@ -91,12 +91,12 @@ class RealKiCadBuildToolTests(unittest.TestCase):
 
     def test_gal_import_verifier_finds_missing_kicad_gal_exports(self) -> None:
         proxy_undefined = (
-            "                 U _ZN5KIGFX4VIEW11MakeOverlayEv\\n"
-            "                 U _ZN5KIGFX12VIEW_OVERLAY5ClearEv\\n"
-            "                 U _ZN3wx6Window6EnableEb\\n"
+            "                 U _ZN5KIGFX4VIEW11MakeOverlayEv\n"
+            "                 U _ZN5KIGFX12VIEW_OVERLAY5ClearEv\n"
+            "                 U _ZN3wx6Window6EnableEb\n"
         )
         gal_defined = (
-            "0000000000010000 T _ZN5KIGFX4VIEW11MakeOverlayEv\\n"
+            "0000000000010000 T _ZN5KIGFX4VIEW11MakeOverlayEv\n"
         )
         self.assertEqual(
             build_proxy.missing_gal_symbols(proxy_undefined, gal_defined),
