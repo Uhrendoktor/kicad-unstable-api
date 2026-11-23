@@ -19,6 +19,7 @@
 #  include <wx/sizer.h>
 #  include <wx/menu.h>
 #  include <wx/eventfilter.h>
+#  include <wx/event.h>
 #  include <wx/aui/aui.h>
 #  include <wx/propgrid/propgrid.h>
 #  include <wx/propgrid/advprops.h>
@@ -328,7 +329,7 @@ public:
         }
 
         auto* window = dynamic_cast<wxWindow*>(event.GetEventObject());
-        if (!window || !wxIsMainThread())
+        if (!window || !on_gui_thread())
             return Event_Skip;
 
         std::vector<WindowObserverEntry> observers;
