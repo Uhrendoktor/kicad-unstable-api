@@ -137,12 +137,6 @@ typedef struct KUA_HostApi
     int32_t (*ui_window_destroy)(uint64_t window);
     int32_t (*ui_window_show)(uint64_t window, int32_t show);
     int32_t (*ui_window_get_children)(uint64_t parent, uint64_t* handles, uint32_t capacity);
-    /* Top-level windows owned by this editor and lifecycle notifications for native dialogs. */
-    int32_t (*ui_window_get_top_level_windows)(uint64_t editor_frame,
-                                               uint64_t* handles, uint32_t capacity);
-    uint64_t (*ui_window_observe)(uint64_t editor_frame,
-                                  KUA_UiWindowEventCallback callback, void* user_data);
-    int32_t (*ui_window_unobserve)(uint64_t observer);
     int32_t (*ui_window_get_class_name)(uint64_t window, char* buffer, uint32_t capacity);
     int32_t (*ui_window_set_text)(uint64_t window, const char* text);
     uint64_t (*ui_sizer_create)(uint32_t kind, int32_t orientation,
@@ -193,6 +187,14 @@ typedef struct KUA_HostApi
     int32_t (*ui_property_grid_get_string)(uint64_t grid, const char* name,
                                            char* buffer, uint32_t capacity);
     int32_t (*ui_property_grid_delete)(uint64_t grid, const char* name);
+
+    /* Appended v1 extensions: keep all earlier KUA_HostApi offsets stable. */
+    /* Top-level windows owned by this editor and lifecycle notifications for native dialogs. */
+    int32_t (*ui_window_get_top_level_windows)(uint64_t editor_frame,
+                                               uint64_t* handles, uint32_t capacity);
+    uint64_t (*ui_window_observe)(uint64_t editor_frame,
+                                  KUA_UiWindowEventCallback callback, void* user_data);
+    int32_t (*ui_window_unobserve)(uint64_t observer);
 } KUA_HostApi;
 
 typedef struct KUA_ExtensionApi
