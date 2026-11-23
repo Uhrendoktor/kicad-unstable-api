@@ -124,6 +124,19 @@ void on_window(const KUA_EditorContext* context)
     const int32_t stale_dialog_handle = dialog
         ? g_host->ui_window_get_class_name(dialog, destroyed_class, sizeof(destroyed_class))
         : 0;
+    // Child windows are destroyed synchronously by wxWindow::Destroy(), so
+    // this probe verifies delivery of the native wxEVT_DESTROY notification.
+    const uint64_t destroy_probe = frame_window
+        ? g_host->ui_window_create(frame_window, KUA_UI_WINDOW_PANEL, -1, "KUA destroy probe", 0)
+        : 0;
+    const int32_t destroy_probe_result = destroy_probe
+        ? g_host->ui_window_destroy(destroy_probe)
+        : -1;
+    char destroyed_probe_class[64]{};
+    const int32_t stale_destroy_probe = destroy_probe
+        ? g_host->ui_window_get_class_name(destroy_probe, destroyed_probe_class,
+                                           sizeof(destroyed_probe_class))
+        : 0;
     const int32_t window_observer_removed = window_observer
         ? g_host->ui_window_unobserve(window_observer)
         : -1;
@@ -214,9 +227,10 @@ void on_window(const KUA_EditorContext* context)
 
     char ui_details[256]{};
     std::snprintf(ui_details, sizeof(ui_details),
-                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|page=%d|count=%d|class=%d|aui=%d|pane=%d|update=%d|detach=%d|menu=%d|bind=%d|unbind=%d|property=%d",
+                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|page=%d|count=%d|class=%d|aui=%d|pane=%d|update=%d|detach=%d|menu=%d|bind=%d|unbind=%d|property=%d",
                   frame_window != 0, top_level_initial, dialog != 0, dialog_shown, dialog_hidden,
-                  dialog_enumerated, dialog_destroyed, stale_dialog_handle, window_observer_removed,
+                  dialog_enumerated, dialog_destroyed, stale_dialog_handle, destroy_probe != 0,
+                  destroy_probe_result, stale_destroy_probe, window_observer_removed,
                   g_window_shown_events, g_window_hidden_events, g_window_destroying_events,
                   panel != 0, page_added, page_count, class_read, manager != 0, pane_added,
                   aui_updated, pane_detached, menu_attached, menu_binding != 0, menu_unbound,
@@ -224,8 +238,10 @@ void on_window(const KUA_EditorContext* context)
     const bool ui_ok = frame_window && top_level_initial > 0 && window_observer &&
                        dialog && dialog_shown > 0 && dialog_hidden > 0 && dialog_enumerated &&
                        dialog_destroyed > 0 && stale_dialog_handle == -1 &&
+                       destroy_probe && destroy_probe_result > 0 && stale_destroy_probe == -1 &&
                        window_observer_removed > 0 && g_window_shown_events > 0 &&
-                       g_window_hidden_events > 0 && panel && notebook && page_added > 0 &&
+                       g_window_hidden_events > 0 && g_window_destroying_events > 0 &&
+                       panel && notebook && page_added > 0 &&
                        page_count == 1 && class_read > 0 &&
                        std::string(class_name).find("wxNotebook") != std::string::npos &&
                        pane_added > 0 && aui_updated > 0 && pane_detached > 0 &&
