@@ -26,6 +26,14 @@ int initialize(const KUA_HostApi* host)
         !host->ui_window_destroy || !host->ui_window_get_children ||
         !host->ui_window_get_top_level_windows || !host->ui_window_observe ||
         !host->ui_window_unobserve ||
+        !host->ui_text_ctrl_set_value || !host->ui_text_ctrl_get_value ||
+        !host->ui_check_box_set_value || !host->ui_check_box_get_value ||
+        !host->ui_choice_append || !host->ui_choice_clear || !host->ui_choice_get_count ||
+        !host->ui_choice_set_selection || !host->ui_choice_get_selection ||
+        !host->ui_choice_get_string_selection || !host->ui_window_enable ||
+        !host->ui_window_raise || !host->ui_window_set_focus ||
+        !host->ui_window_set_size || !host->ui_window_get_size ||
+        !host->ui_window_set_position || !host->ui_window_get_position ||
         !host->ui_notebook_add_page || !host->ui_menu_bar_get || !host->ui_menu_create ||
         !host->ui_aui_get_manager || !host->ui_aui_add_pane ||
         !host->ui_properties_get_panel || !host->ui_properties_get_grid ||
@@ -44,6 +52,23 @@ int initialize(const KUA_HostApi* host)
         host->ui_window_get_top_level_windows(0, nullptr, 0) != -1 ||
         host->ui_window_observe(0, nullptr, nullptr) != 0 ||
         host->ui_window_unobserve(0) != -1 ||
+        host->ui_text_ctrl_set_value(0, "") != -1 ||
+        host->ui_text_ctrl_get_value(0, nullptr, 0) != -1 ||
+        host->ui_check_box_set_value(0, 1) != -1 ||
+        host->ui_check_box_get_value(0) != -1 ||
+        host->ui_choice_append(0, "") != -1 ||
+        host->ui_choice_clear(0) != -1 ||
+        host->ui_choice_get_count(0) != -1 ||
+        host->ui_choice_set_selection(0, 0) != -1 ||
+        host->ui_choice_get_selection(0) != -1 ||
+        host->ui_choice_get_string_selection(0, nullptr, 0) != -1 ||
+        host->ui_window_enable(0, 1) != -1 ||
+        host->ui_window_raise(0) != -1 ||
+        host->ui_window_set_focus(0) != -1 ||
+        host->ui_window_set_size(0, 1, 1) != -1 ||
+        host->ui_window_get_size(0, nullptr, nullptr) != -1 ||
+        host->ui_window_set_position(0, 1, 1) != -1 ||
+        host->ui_window_get_position(0, nullptr, nullptr) != -1 ||
         host->ui_notebook_add_page(0, 0, "", 0) != -1 ||
         host->ui_menu_create(0) != 0 ||
         host->ui_aui_get_manager(0) != 0 ||
