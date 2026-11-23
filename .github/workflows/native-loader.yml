@@ -71,7 +71,9 @@ jobs:
             -DKICAD_SCRIPTING_WXPYTHON=OFF \
             -DKICAD_BUILD_QA_TESTS=OFF \
             -DKICAD_BUILD_I18N=OFF
-      - name: Compile both production KIFACE proxies against KiCad headers
+      - name: Build KiCad GAL shared library for proxy runtime dependency
+        run: cmake --build /tmp/kicad-build --parallel 2 --target gal
+      - name: Compile both production KIFACE proxies against KiCad headers and GAL
         run: |
           python3 tools/build_real_kicad_proxy.py \
             --kicad-source /tmp/kicad-source \
