@@ -88,6 +88,22 @@ def compiler_and_flags(entry: dict[str, Any]) -> tuple[str, list[str]]:
     return compiler, flags
 
 
+def parse_nm_symbol_names(output: str) -> set[str]:
+    names: set[str] = set()
+    for line in output.splitlines():
+        fields = line.split()
+        if len(fields) >= 2:
+            names.add(fields[-1].split("@", 1)[0])
+    return names
+
+
+def missing_gal_symbols(proxy_undefined: str, gal_defined: str) -> list[str]:
+    undefined = parse_nm_symbol_names(proxy_undefined)
+    defined = parse_nm_symbol_names(gal_defined)
+    required = {name for name in undefined if name.startswith("_ZN5KIGFX")}
+    return sorted(required - defined)
+
+
 def make_link_command(
     entry: dict[str, Any],
     source_file: Path,
@@ -205,7 +221,26 @@ def main() -> int:
                 raise ValueError(f"{output} does not declare a DT_NEEDED dependency on KiCad libkigal.")
             if "$ORIGIN/../common/gal" not in dynamic:
                 raise ValueError(f"{output} is missing its relative KiCad build-tree GAL RUNPATH.")
-            print(f"PASS: {output} exports KIFACE_1 and loads KiCad libkigal (KiCad {head}).")
+
+            undefined = subprocess.run(
+                ["nm", "-D", "--undefined-only", str(output)],
+                check=True, capture_output=True, text=True,
+            ).stdout
+            gal_defined = subprocess.run(
+                ["nm", "-D", "--defined-only", str(gal_library)],
+                check=True, capture_output=True, text=True,
+            ).stdout
+            missing_gal = missing_gal_symbols(undefined, gal_defined)
+            if missing_gal:
+                raise ValueError(
+                    f"{output} references GAL symbols not exported by {gal_library}: "
+                    + ", ".join(missing_gal)
+                )
+            print(
+                f"PASS: {output} exports KIFACE_1, links libkigal, and resolves "
+                "all "
+                f"direct GAL references (KiCad {head})."
+            )
 
     except (OSError, subprocess.CalledProcessError, ValueError, KeyError, json.JSONDecodeError) as error:
         print(f"real KiCad proxy build failed: {error}", file=sys.stderr)
