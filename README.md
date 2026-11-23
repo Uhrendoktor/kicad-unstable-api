@@ -19,9 +19,9 @@ This requires no custom KiCad executable, no special command-line arguments, no 
 
 This is not a stable KiCad C++ ABI. KIFACE's virtual interface and C++ object layouts can change. Public headers are not proof that all implementations are exported from KiCad's shared libraries. The prototype currently uses a synthetic KIFACE test double for loader tests; production editor adapters must be built against the exact KiCad headers and binary ABI.
 
-The cross-platform test target remains a synthetic KIFACE host and original module. A separate Linux CI job now configures the pinned KiCad source tree and compiles both production proxy faces with the real Eeschema/PCB Editor compile flags, generated headers and wxWidgets configuration from KiCad's `compile_commands.json`. This catches production-header signature and include errors, but it does not build or launch KiCad itself.
+The cross-platform test target remains a synthetic KIFACE host and original module. A separate Linux CI job configures the pinned KiCad source tree and compiles both production proxy faces with the real Eeschema/PCB Editor compile flags, generated headers and wxWidgets configuration from KiCad's `compile_commands.json`. It then builds the matching Eeschema and PCB Editor executables and runs the reversible live smoke test under Xvfb. The probe verifies real editor initialization, non-null frame/canvas/view handles and successful GAL overlay create/style/line/circle/rectangle calls before restoring the original KIFACE modules.
 
-The `tools/smoke_real_kicad.py` runner can be used on a disposable Linux KiCad installation built from the same source/toolchain. It temporarily installs the proxies, launches both editor binaries, checks that the extension receives non-null frame/canvas/view handles, exercises GAL overlay create/style/line/circle/rectangle operations, and restores the original modules. The automated workflow does not run this GUI smoke test; the running binary must be the exact build corresponding to the compile database, and pixel-level rendering, pass-through input, macOS Gatekeeper and Windows signature policy still require platform integration testing.
+This proves those runtime entry points against the pinned Linux KiCad build. It is not pixel-level screenshot proof of the visible geometry, mouse-event pass-through proof, or proof for Windows/macOS loader policy, signature validation or Gatekeeper.
 
 ## Repository map
 
@@ -65,17 +65,18 @@ Build the probe extension:
     cmake -S . -B build
     cmake --build build --target kua_real_smoke_extension
 
-On a disposable Linux KiCad installation built from the same source commit and toolchain, run the reversible live smoke test under X11 (or `xvfb-run`):
+On a disposable Linux KiCad build tree, the Eeschema and PCB Editor KIFACE modules and executables are in separate directories. Run the reversible smoke test under X11 (or `xvfb-run`):
 
     xvfb-run -a python tools/smoke_real_kicad.py \
-      --install-dir /path/to/kicad/bin \
+      --eeschema-install-dir /path/to/kicad-build/eeschema \
+      --pcbnew-install-dir /path/to/kicad-build/pcbnew \
       --proxy-dir build/real-kicad \
       --smoke-extension build/kua_real_smoke_extension.so \
-      --eeschema /path/to/eeschema \
-      --pcbnew /path/to/pcbnew
+      --eeschema /path/to/kicad-build/eeschema/eeschema \
+      --pcbnew /path/to/kicad-build/pcbnew/pcbnew
 
 The smoke runner refuses an existing managed install or an existing extension directory unless explicitly allowed. It backs up both original KIFACE modules and restores them after the run. Do not run it against a production installation.
 
 ## Status
 
-Prototype stage. The synthetic three-platform loader/installer matrix and the pinned Linux production-header compile are CI checked. The live-editor runner is available but still requires execution against the exact built KiCad binaries on a disposable GUI-capable installation. The proxy disables queued host-to-extension GUI callbacks before invoking extension shutdown; native extension modules remain mapped until process exit to avoid dangling vtables and RTTI references. Do not install into a production KiCad installation.
+Prototype stage. The synthetic three-platform loader/installer matrix, pinned Linux production-header compile and real KiCad 11 Eeschema/PCB Editor GAL API smoke test run in CI. The smoke uses the same pinned source/build toolchain and restores the original modules after both editor processes exit. Pixel-level rendering, input pass-through, Windows production compilation and macOS Gatekeeper remain separate integration gates. The proxy disables queued host-to-extension GUI callbacks before invoking extension shutdown; native extension modules remain mapped until process exit to avoid dangling vtables and RTTI references. Do not install into a production KiCad installation.
