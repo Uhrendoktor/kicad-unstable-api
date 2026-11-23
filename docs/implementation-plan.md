@@ -200,9 +200,9 @@ The harness is useful for loader mechanics only. It does not prove that a real K
 5. The host scans a shared extension directory but has no manifest, dependency ordering, capability negotiation or per-extension enable/disable settings yet.
 6. The frame callback filters to the primary `FRAME_SCH` / `FRAME_PCB_EDITOR` window and now supplies borrowed opaque frame, canvas and GAL view handles. Canvas/view discovery uses `EDA_DRAW_FRAME::GetCanvas()` and `EDA_DRAW_PANEL_GAL::GetView()` from the exact headers; document and selection services remain unimplemented.
 7. The installer has no platform privilege-elevation flow and no integration with the running IPC add-on. It must schedule after *all* host processes exit and confirm executable identity/PID to avoid PID-reuse races.
-8. CI tests both synthetic editor faces and the joint install/restore workflow, compiles both production proxy faces against pinned KiCad headers and `libkigal` on Linux, and builds both pinned editor executables. The live GAL API smoke is automated under Xvfb; the prior failure was traced to the proxy's missing eager GAL dependency and the current run validates the link fix.
+8. CI tests both synthetic editor faces and the joint install/restore workflow, compiles both production proxy faces against pinned KiCad headers and `libkigal` on Linux, and builds both pinned editor executables. Run [45190113894](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45190113894) passed the live Xvfb smoke in both editors: extension initialization, non-null frame/canvas/view handles, and successful GAL overlay API calls were recorded; the original KIFACE modules were restored.
 9. The deferred-helper zombie-process wait bug is fixed; the current CI matrix exercises the helper on Windows, macOS and Linux.
-10. The real-editor smoke runner is Linux-only and runs in CI against the pinned source build; the first runtime attempt failed before extension initialization and has not yet passed. Pixel-level rendering, mouse pass-through, Windows production builds/signature policy and macOS production builds/Gatekeeper tests are not in CI.
+10. The real-editor smoke runner is Linux-only and passes in CI against the pinned source build. It proves live initialization and GAL API calls, but not pixel-level overlay rendering or mouse pass-through. Windows production builds/signature policy and macOS production builds/Gatekeeper tests remain unvalidated.
 
 ## Delivery order
 
@@ -213,8 +213,8 @@ P0 — loader correctness:
 4. Add real-install discovery, all-process shutdown wait, backup/restore and startup recovery.
 
 P1 — first real native editor integration:
-5. Build one real Eeschema adapter against an exact KiCad build.
-6. Discover frame/canvas/view and draw one transient GAL overlay.
+5. Build real Eeschema and PCB Editor proxies against an exact KiCad build. **Completed for the pinned Linux build.**
+6. Discover frame/canvas/view and exercise transient GAL overlay operations. **Completed in both editors in the pinned Linux smoke test; pixel-level rendering is not yet verified.**
 7. Prove passive pass-through, hover and one interactive tool event.
 8. Add one shared AUI pane and a two-provider tab registry.
 
