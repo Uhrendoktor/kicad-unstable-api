@@ -197,9 +197,13 @@ def main() -> int:
         # Install one KIFACE module in each editor directory. This also supports
         # KiCad's own build tree, where Eeschema and PCB Editor have separate
         # module/executable directories.
+        install_groups: dict[Path, list[str]] = {}
         for module, install_root, _, _, _, _ in install_specs:
+            install_groups.setdefault(install_root, []).append(module)
+
+        for install_root, modules in install_groups.items():
             result = modloader.install(
-                install_root, proxy_dir, modules=[module], suffix=".kiface"
+                install_root, proxy_dir, modules=modules, suffix=".kiface"
             )
             if result.get("state") == "installed":
                 installed_dirs.append(install_root)
