@@ -53,7 +53,8 @@ jobs:
             libzstd-dev libspnav-dev libpoppler-glib-dev
       - name: Fetch pinned KiCad source
         run: |
-          git clone --no-checkout https://github.com/KiCad/kicad-source-mirror.git /tmp/kicad-source
+          git init /tmp/kicad-source
+          git -C /tmp/kicad-source remote add origin https://github.com/KiCad/kicad-source-mirror.git
           git -C /tmp/kicad-source fetch --depth=1 origin b7066f886375b186ca8fa469de3a6382f6bba400
           git -C /tmp/kicad-source checkout --detach FETCH_HEAD
       - name: Configure matching KiCad build tree (no full KiCad compile)
