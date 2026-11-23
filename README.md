@@ -1,8 +1,10 @@
 # KiCad Unstable API
 
-A research prototype for a private, cross-platform native extension runtime for stock KiCad installations.
+A research prototype for a private, cross-platform in-process native extension runtime for stock KiCad installations.
 
-The goal is to extend KiCad's IPC surface with bindings to existing native KiCad and wxWidgets behavior that plugins need but cannot currently call: GAL overlays, native tool/move actions, wxWindow/dialog creation and ownership, menu insertion, AUI docking, notebook-page insertion, property-grid operations, selection and document/object access. Plugins such as Blocks, JLCPCB Interface and Clippy keep their own UI, workflows, data models and business logic; KUA exposes native calls only.
+The current prototype exposes a versioned C-compatible function table (`KUA_HostApi`) to native extension modules loaded inside KiCad. It is not an out-of-process IPC/RPC server or client. External transport and typed wire conversion remain unimplemented.
+
+The longer-term goal is to make existing KiCad and wxWidgets behavior reachable to independently maintained plugins beyond what KiCad's current IPC add-on API exposes: GAL overlays, native tool/move actions, wxWindow/dialog creation and ownership, menu insertion, AUI docking, notebook-page insertion, property-grid operations, selection and document/object access. Plugins such as Blocks, JLCPCB Interface and Clippy keep their own UI, workflows, data models and business logic; KUA exposes native calls only.
 
 ## Proposed bootstrap
 
@@ -21,13 +23,13 @@ This is not a stable KiCad C++ ABI. KIFACE's virtual interface and C++ object la
 
 The cross-platform test target remains a synthetic KIFACE host and original module. A separate Linux CI job configures the pinned KiCad source tree, builds its shared GAL library, and compiles both production proxy faces with the real Eeschema/PCB Editor compile flags and generated headers from KiCad's `compile_commands.json`. The proxies link `libkigal` explicitly and carry a build-tree-relative RUNPATH. This is required because KiCad loads the proxy with eager symbol resolution before the preserved original KIFACE is loaded; the editor launcher itself does not load the GAL shared library.
 
-Both matching Eeschema and PCB Editor executables are built and run under Xvfb in the pinned Linux CI job. The latest run (GitHub Actions run [45190113894](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45190113894), commit `17a06b86`) passed for both editors: each initialized the extension, supplied non-null frame/canvas/view handles, and successfully created and exercised a GAL overlay using style, line, circle and rectangle calls. The runner then restored the original Eeschema and PCB Editor KIFACE modules. This proves live API invocation in the pinned build, not pixel-level visual correctness or mouse-event pass-through; those remain separate gates.
+An earlier pinned Linux run ([45190113894](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45190113894), commit `17a06b86`) built and ran both editors under Xvfb and passed a GAL-only live smoke: each editor initialized the extension, supplied non-null frame/canvas/view handles, and exercised overlay style, line, circle and rectangle calls. The runner restored the original Eeschema and PCB Editor KIFACE modules. That historical result does not verify the later wxWidgets window, menu, sizer or lifecycle bindings. Those require their own exact-build compile and live-editor smoke; pixel-level rendering and mouse-event pass-through remain separate gates.
 
 ## Repository map
 
 - docs/research.md — KiCad loader, exported symbols, and C++ API boundaries.
 - docs/use-case-matrix.md — requirements derived from kicad-blocks, kicad-jlcpcb-interface and kicad-clippy.
-- docs/api-capability-catalog.md — native IPC binding catalogue for windows, menus, AUI docking, notebooks, Properties grids, objects and tools; plugin behavior stays in plugins.
+- docs/api-capability-catalog.md — native binding catalogue for windows, menus, AUI docking, notebooks, Properties grids, objects and tools; it distinguishes the current in-process C ABI from the unimplemented external IPC/RPC layer.
 - docs/platform-loader.md — platform mechanics, installation, recovery and validation plan.
 - tests/native/synthetic_kiface.hpp — synthetic KIFACE ABI test double; not a KiCad header projection.
 - include/kicad_unstable_api/extension_api.h — C ABI for privately maintained native extension modules.
