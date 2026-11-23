@@ -22,6 +22,7 @@ class RealKiCadSmokeRunnerTests(unittest.TestCase):
         self.assertIn("--eeschema-install-dir", result.stdout)
         self.assertIn("--pcbnew-install-dir", result.stdout)
         self.assertIn("--proxy-dir", result.stdout)
+        self.assertIn("--diagnostics-dir", result.stdout)
 
 
 if __name__ == "__main__":
