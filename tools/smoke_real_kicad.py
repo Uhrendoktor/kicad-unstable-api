@@ -91,13 +91,14 @@ def run_editor(
             f"initialize|editor={editor_kind}|",
             f"window|editor={editor_kind}|",
             f"overlay-ready|editor={editor_kind}|",
+            f"native-ui-ready|editor={editor_kind}|",
         )
         try:
             while time.monotonic() < deadline:
                 last_content = log_file.read_text(encoding="utf-8", errors="replace") if log_file.exists() else ""
                 missing = [event for event in required_events if event not in last_content]
                 if not missing:
-                    print(f"PASS: {name} initialized, created a real editor frame, and exercised GAL overlays.")
+                    print(f"PASS: {name} initialized, exercised GAL overlays, and created native windows, notebook pages, an AUI pane, a menu, and Properties-grid entries.")
                     return
                 if process.poll() is not None:
                     failure = f"{name} exited with code {process.returncode} before events {missing}."

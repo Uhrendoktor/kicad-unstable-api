@@ -41,6 +41,8 @@ int initialize(const KUA_HostApi* host)
     return 1;
 }
 
+void on_menu_command(void* user_data);
+
 void on_window(const KUA_EditorContext* context)
 {
     if (!context || context->struct_size < sizeof(KUA_EditorContext))
