@@ -407,7 +407,7 @@ int32_t ui_notebook_add_page(uint64_t notebook_handle, uint64_t page_handle,
 {
     if (!on_gui_thread() || !label)
         return -1;
-    auto* notebook = wxDynamicCast(find_ui_window(notebook_handle), wxNotebook);
+    auto* notebook = dynamic_cast<wxNotebook*>(find_ui_window(notebook_handle));
     wxWindow* page = find_ui_window(page_handle);
     if (!notebook || !page)
         return -1;
@@ -470,7 +470,7 @@ uint64_t ui_menu_bar_get(uint64_t frame_handle)
     if (!on_gui_thread())
         return 0;
     wxWindow* window = find_ui_window(frame_handle);
-    auto* frame = wxDynamicCast(window, wxFrame);
+    auto* frame = dynamic_cast<wxFrame*>(window);
     return frame ? register_ui_handle(frame->GetMenuBar(), UiHandleKind::MenuBar,
                                       g_ui_handles[frame_handle].frame) : 0;
 }
@@ -644,7 +644,7 @@ uint64_t ui_properties_get_panel(uint64_t frame_handle)
 {
     if (!on_gui_thread())
         return 0;
-    auto* frame = wxDynamicCast(find_ui_window(frame_handle), EDA_DRAW_FRAME);
+    auto* frame = dynamic_cast<EDA_DRAW_FRAME*>(find_ui_window(frame_handle));
     if (!frame)
         return 0;
     PROPERTIES_PANEL* panel = frame->GetPropertiesPanel();
@@ -657,7 +657,7 @@ uint64_t ui_properties_get_grid(uint64_t panel_handle)
     if (!on_gui_thread())
         return 0;
     wxWindow* window = find_ui_window(panel_handle);
-    auto* panel = wxDynamicCast(window, PROPERTIES_PANEL);
+    auto* panel = dynamic_cast<PROPERTIES_PANEL*>(window);
     return panel ? register_ui_handle(panel->GetPropertyGrid(), UiHandleKind::PropertyGrid,
                                       g_ui_handles[panel_handle].frame) : 0;
 }
@@ -738,7 +738,7 @@ int32_t ui_property_grid_get_string(uint64_t grid_handle, const char* name,
     if (!entry)
         return -1;
     auto* grid = static_cast<wxPropertyGrid*>(entry->pointer);
-    wxPGProperty* property = grid->GetPropertyByName(wxString::FromUTF8(name));
+    wxPGProperty* property = grid->GetProperty(wxString::FromUTF8(name));
     if (!property)
         return -1;
     copy_utf8_to_buffer(grid->GetPropertyValueAsString(property), buffer, capacity);
