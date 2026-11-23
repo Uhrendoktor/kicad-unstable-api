@@ -1126,7 +1126,8 @@ int32_t overlay_rectangle(uint64_t, double, double, double, double) { return -1;
 uint64_t ui_window_get_handle(void*) { return 0; }
 int32_t ui_window_get_top_level_windows(uint64_t, uint64_t*, uint32_t) { return -1; }
 uint64_t ui_window_observe(uint64_t, KUA_UiWindowEventCallback, void*) { return 0; }
-int32_t ui_window_unobserve(uint64_t) { return -1; }uint64_t ui_window_create(uint64_t, uint32_t, int32_t, const char*, int32_t) { return 0; }
+int32_t ui_window_unobserve(uint64_t) { return -1; }
+uint64_t ui_window_create(uint64_t, uint32_t, int32_t, const char*, int32_t) { return 0; }
 int32_t ui_window_destroy(uint64_t) { return -1; }
 int32_t ui_window_show(uint64_t, int32_t) { return -1; }
 int32_t ui_window_get_children(uint64_t, uint64_t*, uint32_t) { return -1; }
