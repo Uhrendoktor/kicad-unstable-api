@@ -23,7 +23,7 @@ void record(const char* event, uint32_t editor_kind, const char* details = "")
 
 int initialize(const KUA_HostApi* host)
 {
-    record("initialize-entered", host ? host->editor_kind : KUA_EDITOR_UNKNOWN);
+    record("initialize-entered", host ? host->editor_kind : static_cast<uint32_t>(KUA_EDITOR_UNKNOWN));
     if (!host || host->abi_version != KUA_EXTENSION_ABI_V1 ||
         host->struct_size < sizeof(KUA_HostApi) || !host->overlay_create ||
         !host->overlay_destroy || !host->overlay_set_style || !host->overlay_line ||
