@@ -73,7 +73,8 @@ class RealKiCadBuildToolTests(unittest.TestCase):
         proxy_source = ROOT / "src" / "kiface_proxy.cpp"
         output = self.root / "_pcbnew.kiface"
         command = build_proxy.make_link_command(
-            entry, proxy_source, output, "pcbnew", "b7066f886375b186ca8fa469de3a6382f6bba400"
+            entry, proxy_source, output, "pcbnew", "b7066f886375b186ca8fa469de3a6382f6bba400",
+            self.root / "libkigal.so.9.0.0",
         )
 
         self.assertEqual(command[0], "/usr/bin/c++")
@@ -83,6 +84,8 @@ class RealKiCadBuildToolTests(unittest.TestCase):
         self.assertIn("-DKUA_BUILD_EDITOR_PCB", command)
         self.assertIn("-shared", command)
         self.assertIn(str(proxy_source), command)
+        self.assertIn(str(self.root / "libkigal.so.9.0.0"), command)
+        self.assertIn("-Wl,-rpath,$ORIGIN/../common/gal", command)
         self.assertIn("-ldl", command)
         self.assertEqual(command[-1], str(output))
 
