@@ -119,7 +119,7 @@ struct UiHandleEntry
     wxWindow* owner_window{};
 };
 
-struct KuaMenuEventHandler
+struct KuaMenuEventHandler : public wxEvtHandler
 {
     KUA_GuiCallback callback{};
     void* user_data{};
@@ -371,8 +371,8 @@ void clear_window_observers_for_frame(wxWindow* frame)
     }
 
     // Do not remove the filter from inside FilterEvent(): wxWidgets iterates
-    // the filter linked list while invoking it. It remains dormant until host
-    // shutdown, where it is removed outside event dispatch.
+    // the filter linked list while invoking it. With no observers it continues
+    // native handle invalidation, but emits no plugin callbacks, until shutdown.
 }
 
 void copy_utf8_to_buffer(const wxString& value, char* buffer, uint32_t capacity)
