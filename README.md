@@ -19,9 +19,9 @@ This requires no custom KiCad executable, no special command-line arguments, no 
 
 This is not a stable KiCad C++ ABI. KIFACE's virtual interface and C++ object layouts can change. Public headers are not proof that all implementations are exported from KiCad's shared libraries. The prototype currently uses a synthetic KIFACE test double for loader tests; production editor adapters must be built against the exact KiCad headers and binary ABI.
 
-The cross-platform test target remains a synthetic KIFACE host and original module. A separate Linux CI job configures the pinned KiCad source tree and compiles both production proxy faces with the real Eeschema/PCB Editor compile flags, generated headers and wxWidgets configuration from KiCad's `compile_commands.json`. It then builds the matching Eeschema and PCB Editor executables and runs the reversible live smoke test under Xvfb. The probe verifies real editor initialization, non-null frame/canvas/view handles and successful GAL overlay create/style/line/circle/rectangle calls before restoring the original KIFACE modules.
+The cross-platform test target remains a synthetic KIFACE host and original module. A separate Linux CI job configures the pinned KiCad source tree, builds its shared GAL library, and compiles both production proxy faces with the real Eeschema/PCB Editor compile flags and generated headers from KiCad's `compile_commands.json`. The proxies link `libkigal` explicitly and carry a build-tree-relative RUNPATH. This is required because KiCad loads the proxy with eager symbol resolution before the preserved original KIFACE is loaded; the editor launcher itself does not load the GAL shared library.
 
-The CI smoke currently reaches both built editor executables, but the first live run timed out before the extension initialization callback. The runner now records proxy entry points, original-module loading, extension discovery, wxWidgets traces and a filtered `strace` of KIFACE file opens; it retains these diagnostics as a CI artifact. Treat the runtime gate as unresolved until that run passes. Pixel-level screenshot proof of visible geometry and mouse-event pass-through remain separate gates.
+Both matching Eeschema and PCB Editor executables are built and run under Xvfb. The first live run timed out before the extension initialization callback. Inspection of the generated proxy showed undefined `KIGFX::VIEW` and `VIEW_OVERLAY` references without a `DT_NEEDED` dependency on `libkigal`; that explains why the proxy could be rejected before its entry point ran. The builder now verifies the dependency and RUNPATH with `readelf`, and the diagnostic runner retains proxy-load, original-module, extension-discovery and `strace` logs as a CI artifact. Treat the runtime gate as unresolved until the updated run passes. Pixel-level screenshot proof and mouse-event pass-through remain separate gates.
 
 ## Repository map
 
@@ -55,6 +55,7 @@ Configure the exact KiCad source checkout used to build the target editor binari
 
     cmake -S /path/to/kicad -B /path/to/kicad-build -G Ninja \
       -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DKICAD_USE_PCH=OFF
+    cmake --build /path/to/kicad-build --target gal
     python tools/build_real_kicad_proxy.py \
       --kicad-source /path/to/kicad \
       --kicad-build /path/to/kicad-build \
@@ -79,4 +80,4 @@ The smoke runner refuses an existing managed install or an existing extension di
 
 ## Status
 
-Prototype stage. The synthetic three-platform loader/installer matrix, pinned Linux production-header compile and real KiCad 11 Eeschema/PCB Editor GAL API smoke test run in CI. The smoke uses the same pinned source/build toolchain and restores the original modules after both editor processes exit. Pixel-level rendering, input pass-through, Windows production compilation and macOS Gatekeeper remain separate integration gates. The proxy disables queued host-to-extension GUI callbacks before invoking extension shutdown; native extension modules remain mapped until process exit to avoid dangling vtables and RTTI references. Do not install into a production KiCad installation.
+Prototype stage. The synthetic three-platform loader/installer matrix and pinned Linux production-header compile pass. The live-editor GAL API smoke is automated under Xvfb but the prior run timed out before extension initialization; the latest revision now links and verifies the matching KiCad `libkigal` shared library to fix the eager loader dependency. The runtime gate remains pending until the updated live test passes. Pixel-level rendering, input pass-through, Windows production compilation and macOS Gatekeeper remain separate integration gates. The proxy disables queued host-to-extension GUI callbacks before invoking extension shutdown; native extension modules remain mapped until process exit to avoid dangling vtables and RTTI references. Do not install into a production KiCad installation.
