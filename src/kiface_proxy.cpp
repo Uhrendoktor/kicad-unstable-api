@@ -205,7 +205,7 @@ void remove_menu_bindings_for_window(wxWindow* frame)
 
 void clear_window_observers_for_frame(wxWindow* frame);
 
-void invalidate_ui_window(wxWindow* window)
+void invalidate_ui_window(wxWindow* window, bool destroying = false)
 {
     if (!window)
         return;
@@ -221,7 +221,8 @@ void invalidate_ui_window(wxWindow* window)
 
     remove_menu_bindings_for_window(window);
     clear_window_observers_for_frame(window);
-    g_watched_ui_windows.erase(window);
+    if (destroying)
+        g_watched_ui_windows.erase(window);
 }
 
 void install_ui_window_destroy_hook(wxWindow* window)
@@ -230,7 +231,7 @@ void install_ui_window_destroy_hook(wxWindow* window)
         return;
 
     window->Bind(wxEVT_DESTROY, [window](wxWindowDestroyEvent& event) {
-        invalidate_ui_window(window);
+        invalidate_ui_window(window, true);
         if (g_editor_frames.find(window) != g_editor_frames.end())
         {
             g_editor_frames.erase(window);
@@ -357,7 +358,7 @@ public:
         }
 
         if (destroying)
-            invalidate_ui_window(window);
+            invalidate_ui_window(window, true);
 
         return Event_Skip;
     }
@@ -378,11 +379,9 @@ void clear_window_observers_for_frame(wxWindow* frame)
             ++it;
     }
 
-    if (g_window_observers.empty() && g_window_event_filter_installed)
-    {
-        wxEvtHandler::RemoveFilter(&g_window_event_filter);
-        g_window_event_filter_installed = false;
-    }
+    // Do not remove the filter from inside FilterEvent(): wxWidgets iterates
+    // the filter linked list while invoking it. It remains dormant until host
+    // shutdown, where it is removed outside event dispatch.
 }
 
 void copy_utf8_to_buffer(const wxString& value, char* buffer, uint32_t capacity)
@@ -559,11 +558,7 @@ int32_t ui_window_unobserve(uint64_t observer)
     if (it == g_window_observers.end())
         return -1;
     g_window_observers.erase(it);
-    if (g_window_observers.empty() && g_window_event_filter_installed)
-    {
-        wxEvtHandler::RemoveFilter(&g_window_event_filter);
-        g_window_event_filter_installed = false;
-    }
+    // The filter remains installed and becomes a no-op until host shutdown.
     return 1;
 }
 
