@@ -951,19 +951,26 @@ void on_window(const KUA_EditorContext* context)
                     const wxClassInfo* class_info = window->GetClassInfo();
                     wxWindow* parent = window->GetParent();
                     const wxClassInfo* parent_info = parent ? parent->GetClassInfo() : nullptr;
+                    const wxString class_name =
+                        class_info ? class_info->GetClassName() : wxString("unknown");
+                    const wxString parent_class =
+                        parent_info ? parent_info->GetClassName() : wxString("none");
+                    const auto class_utf8 = class_name.utf8_str();
+                    const auto parent_utf8 = parent_class.utf8_str();
                     char details[256]{};
                     std::snprintf(details, sizeof(details),
                                   "index=%zu|class=%s|parent=%s|shown=%d|editor_frame=%d",
                                   index,
-                                  class_info ? class_info->GetClassName() : "unknown",
-                                  parent_info ? parent_info->GetClassName() : "none",
+                                  class_utf8.data() ? class_utf8.data() : "unknown",
+                                  parent_utf8.data() ? parent_utf8.data() : "none",
                                   window->IsShown() ? 1 : 0,
                                   is_editor_frame ? 1 : 0);
                     record("graceful-window-close-begin", editor_kind, details);
 
                     // Close(true) dispatches wxEVT_CLOSE_WINDOW with veto disabled,
                     // allowing KiCad's EDA frame close handlers to run.
-                    if (window->Close(true))
+                    const bool close_ok = window->Close(true);
+                    if (close_ok)
                     {
                         ++close_requested;
                         record("graceful-window-close-requested", editor_kind, details);
@@ -983,7 +990,7 @@ void on_window(const KUA_EditorContext* context)
                     std::snprintf(processed, sizeof(processed),
                                   "index=%zu|closed=%d|weak_alive=%d|being_deleted=%d",
                                   index,
-                                  close_requested > 0 ? 1 : 0,
+                                  close_ok ? 1 : 0,
                                   remaining ? 1 : 0,
                                   remaining && remaining->IsBeingDeleted() ? 1 : 0);
                     record("graceful-window-close-processed", editor_kind, processed);
