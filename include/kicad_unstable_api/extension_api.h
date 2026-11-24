@@ -254,6 +254,14 @@ typedef struct KUA_HostApi
     int32_t (*ui_menu_set_label)(uint64_t menu, int32_t id, const char* label);
     int32_t (*ui_menu_get_label)(uint64_t menu, int32_t id,
                                  char* buffer, uint32_t capacity);
+
+    /* Appended wxNotebook page operations. RemovePage preserves the page,
+       DeletePage destroys it, and GetPage returns a borrowed window handle. */
+    uint64_t (*ui_notebook_get_page)(uint64_t notebook, uint32_t index);
+    int32_t (*ui_notebook_get_selection)(uint64_t notebook);
+    int32_t (*ui_notebook_set_page_text)(uint64_t notebook, uint32_t index,
+                                         const char* text);
+    int32_t (*ui_notebook_delete_page)(uint64_t notebook, uint32_t index);
 } KUA_HostApi;
 
 typedef struct KUA_ExtensionApi
