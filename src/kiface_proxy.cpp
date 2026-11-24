@@ -1142,10 +1142,13 @@ int32_t ui_menu_bar_append(uint64_t menu_bar_handle, uint64_t menu_handle, const
         return -1;
     UiHandleEntry* bar = find_ui_handle(menu_bar_handle, UiHandleKind::MenuBar);
     UiHandleEntry* menu = find_ui_handle(menu_handle, UiHandleKind::Menu);
-    if (!bar || !menu)
+    if (!bar || !menu || bar->frame != menu->frame)
+        return -1;
+    auto* native_menu = static_cast<wxMenu*>(menu->pointer);
+    if (native_menu->IsAttached())
         return -1;
     const bool ok = static_cast<wxMenuBar*>(bar->pointer)->Append(
-        static_cast<wxMenu*>(menu->pointer), wxString::FromUTF8(title));
+        native_menu, wxString::FromUTF8(title));
     return ok ? 1 : 0;
 }
 
@@ -1198,10 +1201,10 @@ int32_t ui_menu_bar_insert(uint64_t menu_bar_handle, uint32_t index,
     if (!bar_entry || !menu_entry || bar_entry->frame != menu_entry->frame)
         return -1;
     auto* bar = static_cast<wxMenuBar*>(bar_entry->pointer);
-    if (index > bar->GetMenuCount())
+    auto* native_menu = static_cast<wxMenu*>(menu_entry->pointer);
+    if (index > bar->GetMenuCount() || native_menu->IsAttached())
         return -1;
-    return bar->Insert(index, static_cast<wxMenu*>(menu_entry->pointer),
-                       wxString::FromUTF8(title)) ? 1 : 0;
+    return bar->Insert(index, native_menu, wxString::FromUTF8(title)) ? 1 : 0;
 }
 
 int32_t ui_menu_bar_set_label(uint64_t menu_bar_handle, uint32_t index, const char* title)
