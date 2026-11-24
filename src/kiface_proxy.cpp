@@ -216,6 +216,29 @@ void remove_menu_bindings_for_window(wxWindow* frame)
 
 void clear_window_observers_for_frame(wxWindow* frame);
 
+void invalidate_ui_owner_handles(wxWindow* owner_window)
+{
+    if (!owner_window)
+        return;
+
+    // A native owner may destroy non-window members (for example a
+    // wxAuiManager stored in the managed wxWindow) before its base wxWindow
+    // destructor emits wxEVT_DESTROY. Revoke those borrowed handles before
+    // invoking extension observers; retain the window's own handle so the
+    // DESTROYING callback can inspect the native window itself.
+    for (auto it = g_ui_handles.begin(); it != g_ui_handles.end();)
+    {
+        const bool is_owner_window_handle =
+            it->second.kind == UiHandleKind::Window &&
+            it->second.pointer == owner_window;
+
+        if (it->second.owner_window == owner_window && !is_owner_window_handle)
+            it = g_ui_handles.erase(it);
+        else
+            ++it;
+    }
+}
+
 void invalidate_ui_window(wxWindow* window, bool destroying = false)
 {
     if (!window)
@@ -338,6 +361,12 @@ public:
             if (window_belongs_to_editor(window, observer.frame))
                 observers.push_back(observer);
         }
+
+        // wxWidgets emits wxEVT_DESTROY from the base wxWindow destructor,
+        // after a derived window's members have already been destroyed. Revoke
+        // handles to owner-bound native members before extension callbacks.
+        if (destroying)
+            invalidate_ui_owner_handles(window);
 
         for (const WindowObserverEntry& observer : observers)
         {
@@ -1198,21 +1227,46 @@ uint64_t ui_properties_get_panel(uint64_t frame_handle)
 {
     if (!on_gui_thread())
         return 0;
-    auto* frame = dynamic_cast<EDA_DRAW_FRAME*>(find_ui_window(frame_handle));
-    if (!frame)
+
+    wxWindow* window = find_ui_window(frame_handle);
+    UiHandleEntry* frame_entry = find_ui_handle(frame_handle, UiHandleKind::Window);
+
+    // The editor-frame registry is populated only for the primary Eeschema /
+    // PCB Editor frame after its KIFACE class-ID check. Use that identity proof
+    // instead of RTTI: EDA_DRAW_FRAME does not export its typeinfo from KiCad's
+    // hidden-visibility common library, so dynamic_cast would leave an
+    // unresolved ELF relocation in this separately loaded KIFACE module.
+    if (!window || !frame_entry || g_editor_frames.find(window) == g_editor_frames.end())
         return 0;
+
+    auto* frame = static_cast<EDA_DRAW_FRAME*>(window);
     PROPERTIES_PANEL* panel = frame->GetPropertiesPanel();
-    return panel ? register_ui_window(panel, g_ui_handles[frame_handle].frame) : 0;
+    return panel ? register_ui_window(panel, frame_entry->frame) : 0;
 }
 
 uint64_t ui_properties_get_grid(uint64_t panel_handle)
 {
     if (!on_gui_thread())
         return 0;
+
     wxWindow* window = find_ui_window(panel_handle);
-    auto* panel = dynamic_cast<PROPERTIES_PANEL*>(window);
-    return panel ? register_ui_handle(panel->GetPropertyGrid(), UiHandleKind::PropertyGrid,
-                                      g_ui_handles[panel_handle].frame, panel) : 0;
+    UiHandleEntry* panel_entry = find_ui_handle(panel_handle, UiHandleKind::Window);
+
+    if (!window || !panel_entry ||
+        g_editor_frames.find(panel_entry->frame) == g_editor_frames.end())
+        return 0;
+
+    // A valid panel is exactly the object returned by the registered editor
+    // frame. This proves its type without referring to hidden PROPERTIES_PANEL
+    // RTTI; only then is the downcast and native property-grid call performed.
+    auto* frame = static_cast<EDA_DRAW_FRAME*>(panel_entry->frame);
+    if (frame->GetPropertiesPanel() != window)
+        return 0;
+
+    auto* panel = static_cast<PROPERTIES_PANEL*>(window);
+    wxPropertyGrid* grid = panel->GetPropertyGrid();
+    return grid ? register_ui_handle(grid, UiHandleKind::PropertyGrid,
+                                     panel_entry->frame, panel) : 0;
 }
 
 int32_t ui_property_grid_append_string(uint64_t grid_handle, const char* label,
