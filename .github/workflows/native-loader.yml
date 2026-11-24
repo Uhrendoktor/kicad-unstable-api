@@ -181,6 +181,7 @@ jobs:
       # Retry after closing the complete wx top-level window set.
       # Validate deferred destruction of the full wx top-level set before KIFACE teardown.
       # Run deferred top-level window destruction and verify KIFACE cleanup.
+      # One-shot validation of the ordered wxEVT_CLOSE_WINDOW shutdown path.
       - name: Run real Eeschema and PCB Editor GAL smoke with graceful KIFACE shutdown
         env:
           KUA_SMOKE_LD_DEBUG: "1"
