@@ -22,9 +22,9 @@ int g_window_hidden_events = 0;
 int g_window_destroying_events = 0;
 int g_destroy_event_handle_valid = 0;
 uint64_t g_last_destroy_event_handle = 0;
-uint64_t g_managed_aui_panel_handle = 0;
 uint64_t g_managed_aui_manager_handle = 0;
 int g_aui_manager_destroy_callback_result = 0;
+bool g_expect_aui_manager_destroy = false;
 
 #if defined(KUA_SMOKE_WITH_WX)
 class KuaSmokeManagedAuiPanel final : public wxPanel
@@ -58,13 +58,15 @@ void on_native_window_event(uint64_t window, uint32_t event_kind, void*)
             g_host->ui_window_get_class_name(window, class_name, sizeof(class_name)) > 0)
             ++g_destroy_event_handle_valid;
 
-        if (window == g_managed_aui_panel_handle && g_managed_aui_manager_handle &&
+        if (g_expect_aui_manager_destroy && g_managed_aui_manager_handle &&
             g_host && g_host->ui_aui_update)
         {
-            // The manager is a derived-window member, so its handle must
-            // already be stale by the time wxWindow emits DESTROY.
+            // DESTROYING handles are callback-scoped tokens, not the earlier
+            // ui_window_get_handle token. Arm this check only for the panel
+            // whose synchronous Destroy() is under test.
             g_aui_manager_destroy_callback_result =
                 g_host->ui_aui_update(g_managed_aui_manager_handle) == -1 ? 1 : -1;
+            g_expect_aui_manager_destroy = false;
         }
     }
 }
@@ -188,10 +190,6 @@ void on_window(const KUA_EditorContext* context)
                                            expired_destroy_event_class,
                                            sizeof(expired_destroy_event_class))
         : 0;
-    const int32_t window_observer_removed = window_observer
-        ? g_host->ui_window_unobserve(window_observer)
-        : -1;
-
     const uint64_t panel = frame_window
         ? g_host->ui_window_create(frame_window, KUA_UI_WINDOW_PANEL, -1, "KUA UI smoke", 0)
         : 0;
@@ -366,10 +364,11 @@ void on_window(const KUA_EditorContext* context)
     const int32_t managed_manager_before_destroy = managed_manager
         ? g_host->ui_aui_update(managed_manager)
         : -1;
-    g_managed_aui_panel_handle = managed_panel_handle;
     g_managed_aui_manager_handle = managed_manager;
     g_aui_manager_destroy_callback_result = 0;
+    g_expect_aui_manager_destroy = true;
     const bool managed_panel_destroyed = managed_panel && managed_panel->Destroy();
+    g_expect_aui_manager_destroy = false;
     const int32_t managed_manager_after_destroy = managed_manager
         ? g_host->ui_aui_update(managed_manager)
         : -2;
@@ -378,9 +377,12 @@ void on_window(const KUA_EditorContext* context)
                             managed_panel_destroyed &&
                             g_aui_manager_destroy_callback_result == 1 &&
                             managed_manager_after_destroy == -1;
-    g_managed_aui_panel_handle = 0;
     g_managed_aui_manager_handle = 0;
 #endif
+
+    const int32_t window_observer_removed = window_observer
+        ? g_host->ui_window_unobserve(window_observer)
+        : -1;
 
     const uint64_t menu_bar = frame_window ? g_host->ui_menu_bar_get(frame_window) : 0;
     const uint64_t menu = menu_bar ? g_host->ui_menu_create(frame_window) : 0;
