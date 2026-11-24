@@ -118,6 +118,7 @@ struct UiHandleEntry
     void* pointer{};
     void* frame{};
     wxWindow* owner_window{};
+    wxSizer* parent_sizer{};
 };
 
 struct KuaMenuEventHandler : public wxEvtHandler
@@ -177,7 +178,7 @@ uint64_t register_ui_handle(void* pointer, UiHandleKind kind, void* frame,
     uint64_t handle = g_next_ui_handle++;
     if (handle == 0)
         handle = g_next_ui_handle++;
-    g_ui_handles.emplace(handle, UiHandleEntry{kind, pointer, frame, owner_window});
+    g_ui_handles.emplace(handle, UiHandleEntry{kind, pointer, frame, owner_window, nullptr});
     return handle;
 }
 
@@ -889,6 +890,33 @@ void forget_ui_sizer_tree_handles(wxSizer* sizer)
     }
 }
 
+bool ui_sizer_windows_belong_to(wxSizer* sizer, wxWindow* owner_window)
+{
+    if (!sizer || !owner_window)
+        return false;
+
+    const wxSizerItemList& children = sizer->GetChildren();
+    for (wxSizerItemList::compatibility_iterator node = children.GetFirst();
+         node; node = node->GetNext())
+    {
+        wxSizerItem* item = node->GetData();
+        if (!item)
+            continue;
+
+        if (item->IsWindow())
+        {
+            if (!window_belongs_to_editor(item->GetWindow(), owner_window))
+                return false;
+        }
+        else if (item->IsSizer() &&
+                 !ui_sizer_windows_belong_to(item->GetSizer(), owner_window))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 int32_t ui_sizer_add(uint64_t sizer_handle, uint64_t child_handle,
                      int32_t proportion, int32_t flags, int32_t border)
 {
@@ -897,27 +925,44 @@ int32_t ui_sizer_add(uint64_t sizer_handle, uint64_t child_handle,
     UiHandleEntry* sizer_entry = find_ui_handle(sizer_handle, UiHandleKind::Sizer);
     if (!sizer_entry)
         return -1;
-    UiHandleEntry* child_entry = nullptr;
-    const auto child_it = g_ui_handles.find(child_handle);
-    if (child_it != g_ui_handles.end())
-        child_entry = &child_it->second;
-    if (!child_entry)
+    auto child_it = g_ui_handles.find(child_handle);
+    if (child_it == g_ui_handles.end())
+        return -1;
+    UiHandleEntry* child_entry = &child_it->second;
+    auto* sizer = static_cast<wxSizer*>(sizer_entry->pointer);
+    if (!sizer)
         return -1;
 
-    auto* sizer = static_cast<wxSizer*>(sizer_entry->pointer);
     if (child_entry->kind == UiHandleKind::Window)
     {
-        sizer->Add(static_cast<wxWindow*>(child_entry->pointer), proportion, flags, border);
+        auto* child_window = static_cast<wxWindow*>(child_entry->pointer);
+        // wxWindow permits membership in only one sizer. Check before calling
+        // Add(): wxSizer::DoInsert() can continue after SetContainingSizer()
+        // rejects a second owner, so relying on wxWidgets alone is unsafe.
+        if (!child_window || child_window->GetContainingSizer())
+            return -1;
+
+        if (sizer_entry->owner_window &&
+            !window_belongs_to_editor(child_window, sizer_entry->owner_window))
+            return -1;
+
+        sizer->Add(child_window, proportion, flags, border);
     }
     else if (child_entry->kind == UiHandleKind::Sizer)
     {
         auto* child_sizer = static_cast<wxSizer*>(child_entry->pointer);
-        // Do not let a sizer already owned by a window be attached twice.
-        if (child_entry->owner_window || ui_sizer_contains(sizer, child_sizer) ||
+        // Sizer trees are single-parent. Track that relation even before the
+        // root is attached to a window; owner_window alone cannot detect an
+        // unattached nested sizer being inserted into a second parent.
+        if (!child_sizer || child_entry->owner_window || child_entry->parent_sizer ||
+            ui_sizer_contains(sizer, child_sizer) ||
             ui_sizer_contains(child_sizer, sizer))
             return -1;
 
-        sizer->Add(child_sizer, proportion, flags, border);
+        if (!sizer->Add(child_sizer, proportion, flags, border))
+            return -1;
+
+        child_entry->parent_sizer = sizer;
         if (sizer_entry->owner_window)
             set_sizer_owner_recursive(child_sizer, sizer_entry->owner_window,
                                       sizer_entry->frame);
@@ -942,17 +987,30 @@ int32_t ui_window_set_sizer(uint64_t window_handle, uint64_t sizer_handle)
         return -1;
 
     auto* new_sizer = static_cast<wxSizer*>(sizer_entry->pointer);
-    if (!new_sizer || (sizer_entry->owner_window && sizer_entry->owner_window != window))
+    // Only an unattached root can be installed on a window. A nested sizer
+    // must remain owned by its parent sizer, and an existing root cannot be
+    // transferred to a second window without first being explicitly detached.
+    if (!new_sizer || sizer_entry->parent_sizer ||
+        (sizer_entry->owner_window && sizer_entry->owner_window != window))
         return -1;
 
     wxSizer* old_sizer = window->GetSizer();
     if (old_sizer == new_sizer)
         return 1;
 
-    // SetSizer() deletes the old root sizer by default. Invalidate handles for
-    // the whole old tree before wxWidgets recursively destroys its children.
-    if (old_sizer && ui_sizer_contains(old_sizer, new_sizer))
+    // SetSizer() deletes the old root by default. Neither tree may contain the
+    // other during replacement, otherwise deleting the old root would leave
+    // an item in the new tree pointing at freed memory.
+    if (old_sizer && (ui_sizer_contains(old_sizer, new_sizer) ||
+                      ui_sizer_contains(new_sizer, old_sizer)))
         return -1;
+
+    // wxWidgets asserts that every sizer-managed window is a descendant of
+    // the window owning the root. Check the complete tree before SetSizer()
+    // so an invalid attachment is reported as an API failure, not an assert.
+    if (!ui_sizer_windows_belong_to(new_sizer, window))
+        return -1;
+
     if (old_sizer)
         forget_ui_sizer_tree_handles(old_sizer);
 
