@@ -180,6 +180,7 @@ jobs:
       # One-shot retry: close the editor frame before checking graceful KIFACE shutdown.
       # Retry after closing the complete wx top-level window set.
       # Validate deferred destruction of the full wx top-level set before KIFACE teardown.
+      # Run deferred top-level window destruction and verify KIFACE cleanup.
       - name: Run real Eeschema and PCB Editor GAL smoke with graceful KIFACE shutdown
         env:
           KUA_SMOKE_LD_DEBUG: "1"
