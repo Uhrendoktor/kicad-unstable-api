@@ -64,6 +64,8 @@ Each KUA call should map to an existing native method/event or a mechanical sequ
 | `ui_window_observe/unobserve` | Observe native window show/hide/destroy events without consuming KiCad events | Implemented; live-editor acceptance pending |
 | native window destroy tracking | Invalidate window and owned sizer/property handles when the wxWindow is destroyed | Implemented; live-editor acceptance pending |
 | precise menu callback unbind | Remove only KUA's own `wxEVT_MENU` handler for its ID | Implemented; exact-build smoke pending |
+| menu-bar insert/list/label | Query and insert top-level menus and read/change their titles | Implemented; live-editor smoke pending |
+| menu item insert/separator/state/label | Insert normal/check/radio items, separators, enable/check them and read/write labels | Implemented; live-editor smoke pending |
 | `ui_text_ctrl_*` | Read/write native `wxTextCtrl` values | Implemented; exact-build smoke pending |
 | `ui_check_box_*` | Read/write native `wxCheckBox` state | Implemented; exact-build smoke pending |
 | `ui_choice_*` | Append/clear items, count, select and read selected text | Implemented; exact-build smoke pending |
@@ -154,6 +156,8 @@ Expose wxMenuBar/wxMenu methods and events so plugins can insert their own menu 
 - `UI.Menu.Remove/Delete(menu, id)`, `UI.Menu.Enable/Check(menu, id, state)`
 - `UI.Menu.SetLabel(menu, id, label)`
 - `UI.Menu.BindEvent/UnbindEvent(frame, menu_id, callback_id)`
+
+Menu-bar bindings expose count/index lookup, insertion, title get/set, append and removal. Menu bindings expose item count, insertion of normal/check/radio items, separator append/insert, enable/check state get/set, and label get/set. Item operations validate IDs and checkability; menu-bar insertion rejects menus created for another editor. All calls execute on the editor GUI thread.
 
 Use unique IDs. Menu callbacks use a per-binding wxEvtHandler object attached to the target frame; dispatch is independent of wxCommandEvent::GetEventObject(), which wxWidgets sets to the source wxMenu. Unbinding removes only the matching handler object and ID, leaving unrelated KiCad or plugin handlers intact. Editor close and extension shutdown disconnect outstanding KUA menu handlers before their callback state is released.
 
