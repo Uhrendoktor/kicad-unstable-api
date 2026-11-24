@@ -2,7 +2,7 @@ name: Native loader prototype
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/notebook-page-operations]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   native-loader:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     name: ${{ matrix.os }} KIFACE proxy harness
     timeout-minutes: 5
     strategy:
@@ -45,7 +46,11 @@ jobs:
   # Full editor smoke uses the official KiCad nightly binary package built from
   # the exact pinned source commit. Only KUA's proxies and smoke fixture compile.
   real-kicad-linux:
-    if: github.event_name == 'workflow_dispatch' && inputs.full_editor_validation
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.full_editor_validation) ||
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/feature/notebook-page-operations' &&
+       startsWith(github.event.head_commit.message, '[full-editor-validation]'))
     name: Exact-source KiCad nightly runtime and live-editor smoke
     runs-on: ubuntu-24.04
     container: ubuntu:26.04
