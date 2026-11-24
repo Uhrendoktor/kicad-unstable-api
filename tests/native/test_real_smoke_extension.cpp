@@ -482,6 +482,10 @@ void on_window(const KUA_EditorContext* context)
     const int32_t menu_attached = menu_item > 0
         ? g_host->ui_menu_bar_append(menu_bar, menu, "KUA Smoke")
         : -1;
+    const int32_t duplicate_menu_append = menu_attached > 0
+        ? g_host->ui_menu_bar_append(menu_bar, menu, "KUA Duplicate") : 0;
+    const int32_t duplicate_menu_insert = menu_attached > 0
+        ? g_host->ui_menu_bar_insert(menu_bar, 0, menu, "KUA Duplicate") : 0;
     const int32_t menu_bar_count_after_append = menu_attached > 0
         ? g_host->ui_menu_bar_get_menu_count(menu_bar) : -1;
     const uint64_t attached_menu = menu_bar_count_after_append > 0
@@ -565,6 +569,7 @@ void on_window(const KUA_EditorContext* context)
 
     const int menu_ops_ok =
         menu_bar_count_before >= 0 && menu_item > 0 && menu_attached > 0 &&
+        duplicate_menu_append == -1 && duplicate_menu_insert == -1 &&
         menu_bar_count_after_append == menu_bar_count_before + 1 &&
         attached_menu && attached_menu_item_count == 1 &&
         menu_bar_label_read > 0 && std::strcmp(menu_bar_label, "KUA Smoke") == 0 &&
