@@ -35,6 +35,7 @@ int initialize(const KUA_HostApi* host)
         !host->ui_window_set_size || !host->ui_window_get_size ||
         !host->ui_window_set_position || !host->ui_window_get_position ||
         !host->ui_notebook_add_page || !host->ui_menu_bar_get || !host->ui_menu_create ||
+        !host->ui_menu_destroy ||
         !host->ui_menu_bar_get_menu_count || !host->ui_menu_bar_get_menu ||
         !host->ui_menu_bar_insert || !host->ui_menu_bar_set_label ||
         !host->ui_menu_bar_get_label || !host->ui_menu_get_item_count ||
@@ -83,6 +84,7 @@ int initialize(const KUA_HostApi* host)
         host->ui_window_get_position(0, nullptr, nullptr) != -1 ||
         host->ui_notebook_add_page(0, 0, "", 0) != -1 ||
         host->ui_menu_create(0) != 0 ||
+        host->ui_menu_destroy(0) != -1 ||
         host->ui_menu_bar_get_menu_count(0) != -1 ||
         host->ui_menu_bar_get_menu(0, 0) != 0 ||
         host->ui_menu_bar_insert(0, 0, 0, "") != -1 ||

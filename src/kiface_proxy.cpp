@@ -119,6 +119,8 @@ struct UiHandleEntry
     void* frame{};
     wxWindow* owner_window{};
     wxSizer* parent_sizer{};
+    bool menu_owned{};
+    bool menu_attached{};
 };
 
 struct KuaMenuEventHandler : public wxEvtHandler
@@ -178,7 +180,8 @@ uint64_t register_ui_handle(void* pointer, UiHandleKind kind, void* frame,
     uint64_t handle = g_next_ui_handle++;
     if (handle == 0)
         handle = g_next_ui_handle++;
-    g_ui_handles.emplace(handle, UiHandleEntry{kind, pointer, frame, owner_window, nullptr});
+    g_ui_handles.emplace(handle, UiHandleEntry{kind, pointer, frame, owner_window,
+                                                nullptr, false, false});
     return handle;
 }
 
@@ -218,6 +221,17 @@ void remove_menu_bindings_for_window(wxWindow* frame)
 
 void clear_window_observers_for_frame(wxWindow* frame);
 
+void destroy_owned_detached_menu(UiHandleEntry& entry)
+{
+    if (entry.kind != UiHandleKind::Menu || !entry.menu_owned ||
+        entry.menu_attached || !entry.pointer)
+        return;
+
+    auto* menu = static_cast<wxMenu*>(entry.pointer);
+    if (!menu->IsAttached())
+        delete menu;
+}
+
 void invalidate_ui_owner_handles(wxWindow* owner_window)
 {
     if (!owner_window)
@@ -235,7 +249,10 @@ void invalidate_ui_owner_handles(wxWindow* owner_window)
             it->second.pointer == owner_window;
 
         if (it->second.owner_window == owner_window && !is_owner_window_handle)
+        {
+            destroy_owned_detached_menu(it->second);
             it = g_ui_handles.erase(it);
+        }
         else
             ++it;
     }
@@ -250,7 +267,10 @@ void invalidate_ui_window(wxWindow* window, bool destroying = false)
     {
         if ((it->second.kind == UiHandleKind::Window && it->second.pointer == window) ||
             it->second.owner_window == window)
+        {
+            destroy_owned_detached_menu(it->second);
             it = g_ui_handles.erase(it);
+        }
         else
             ++it;
     }
@@ -305,7 +325,10 @@ void forget_ui_handles_for_frame(void* frame)
     for (auto it = g_ui_handles.begin(); it != g_ui_handles.end();)
     {
         if (it->second.frame == frame)
+        {
+            destroy_owned_detached_menu(it->second);
             it = g_ui_handles.erase(it);
+        }
         else
             ++it;
     }
@@ -1144,8 +1167,33 @@ uint64_t ui_menu_create(uint64_t frame_handle)
 {
     if (!on_gui_thread() || !find_ui_window(frame_handle))
         return 0;
-    return register_ui_handle(new wxMenu(), UiHandleKind::Menu,
-                              g_ui_handles[frame_handle].frame, find_ui_window(frame_handle));
+    const uint64_t handle = register_ui_handle(
+        new wxMenu(), UiHandleKind::Menu,
+        g_ui_handles[frame_handle].frame, find_ui_window(frame_handle));
+    if (UiHandleEntry* entry = find_ui_handle(handle, UiHandleKind::Menu))
+        entry->menu_owned = true;
+    return handle;
+}
+
+int32_t ui_menu_destroy(uint64_t menu_handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    auto it = g_ui_handles.find(menu_handle);
+    if (it == g_ui_handles.end() || it->second.kind != UiHandleKind::Menu ||
+        !it->second.menu_owned || !it->second.pointer)
+        return -1;
+
+    auto* menu = static_cast<wxMenu*>(it->second.pointer);
+    if (it->second.menu_attached || menu->IsAttached())
+    {
+        it->second.menu_attached = true;
+        return -1;
+    }
+
+    delete menu;
+    g_ui_handles.erase(it);
+    return 1;
 }
 
 int32_t ui_menu_append(uint64_t menu_handle, int32_t id, const char* label,
@@ -1189,6 +1237,8 @@ int32_t ui_menu_bar_append(uint64_t menu_bar_handle, uint64_t menu_handle, const
         return -1;
     const bool ok = static_cast<wxMenuBar*>(bar->pointer)->Append(
         native_menu, wxString::FromUTF8(title));
+    if (ok)
+        menu->menu_attached = true;
     return ok ? 1 : 0;
 }
 
@@ -1200,7 +1250,17 @@ int32_t ui_menu_bar_remove(uint64_t menu_bar_handle, uint32_t index)
     if (!bar)
         return -1;
     wxMenu* menu = static_cast<wxMenuBar*>(bar->pointer)->Remove(index);
-    return menu ? 1 : 0;
+    if (!menu)
+        return 0;
+
+    const uint64_t menu_handle =
+        register_ui_handle(menu, UiHandleKind::Menu, bar->frame, bar->owner_window);
+    if (UiHandleEntry* removed = find_ui_handle(menu_handle, UiHandleKind::Menu))
+    {
+        removed->menu_owned = true;
+        removed->menu_attached = false;
+    }
+    return 1;
 }
 
 int32_t ui_menu_bar_get_menu_count(uint64_t menu_bar_handle)
@@ -1228,7 +1288,11 @@ uint64_t ui_menu_bar_get_menu(uint64_t menu_bar_handle, uint32_t index)
     wxMenu* menu = bar->GetMenu(index);
     void* frame = entry->frame;
     wxWindow* owner_window = entry->owner_window;
-    return menu ? register_ui_handle(menu, UiHandleKind::Menu, frame, owner_window) : 0;
+    const uint64_t handle = menu
+        ? register_ui_handle(menu, UiHandleKind::Menu, frame, owner_window) : 0;
+    if (UiHandleEntry* menu_entry = find_ui_handle(handle, UiHandleKind::Menu))
+        menu_entry->menu_attached = true;
+    return handle;
 }
 
 int32_t ui_menu_bar_insert(uint64_t menu_bar_handle, uint32_t index,
@@ -1244,7 +1308,10 @@ int32_t ui_menu_bar_insert(uint64_t menu_bar_handle, uint32_t index,
     auto* native_menu = static_cast<wxMenu*>(menu_entry->pointer);
     if (index > bar->GetMenuCount() || native_menu->IsAttached())
         return -1;
-    return bar->Insert(index, native_menu, wxString::FromUTF8(title)) ? 1 : 0;
+    const bool inserted = bar->Insert(index, native_menu, wxString::FromUTF8(title));
+    if (inserted)
+        menu_entry->menu_attached = true;
+    return inserted ? 1 : 0;
 }
 
 int32_t ui_menu_bar_set_label(uint64_t menu_bar_handle, uint32_t index, const char* title)
@@ -1878,6 +1945,49 @@ void destroy_overlays_for_frame(void* frame)
     }
 }
 
+void destroy_owned_menus_for_shutdown()
+{
+    for (auto it = g_ui_handles.begin(); it != g_ui_handles.end();)
+    {
+        UiHandleEntry& entry = it->second;
+        if (entry.kind != UiHandleKind::Menu || !entry.menu_owned)
+        {
+            ++it;
+            continue;
+        }
+
+        auto* menu = static_cast<wxMenu*>(entry.pointer);
+        if (entry.menu_attached)
+        {
+            auto* frame = static_cast<wxWindow*>(entry.frame);
+            const bool frame_is_live = frame && g_editor_frames.find(frame) != g_editor_frames.end() &&
+                                       !frame->IsBeingDeleted();
+            auto* native_frame = frame_is_live ? dynamic_cast<wxFrame*>(frame) : nullptr;
+            wxMenuBar* bar = native_frame ? native_frame->GetMenuBar() : nullptr;
+            if (bar)
+            {
+                for (size_t index = 0; index < bar->GetMenuCount(); ++index)
+                {
+                    if (bar->GetMenu(index) == menu)
+                    {
+                        wxMenu* detached = bar->Remove(index);
+                        if (detached)
+                            delete detached;
+                        break;
+                    }
+                }
+            }
+            // If the menu is not present in a live bar, its pointer may already
+            // have been destroyed by native frame teardown. Do not dereference it.
+        }
+        else if (menu && !menu->IsAttached())
+        {
+            delete menu;
+        }
+        it = g_ui_handles.erase(it);
+    }
+}
+
 void destroy_all_overlays()
 {
     for (auto& entry : g_overlays)
@@ -1897,6 +2007,7 @@ void destroy_all_overlays()
     }
     for (wxWindow* frame : menu_frames)
         remove_menu_bindings_for_window(frame);
+    destroy_owned_menus_for_shutdown();
     if (g_window_event_filter_installed)
     {
         wxEvtHandler::RemoveFilter(&g_window_event_filter);
@@ -1999,6 +2110,7 @@ int32_t ui_notebook_set_page_text(uint64_t, uint32_t, const char*) { return -1; 
 int32_t ui_notebook_delete_page(uint64_t, uint32_t) { return -1; }
 uint64_t ui_menu_bar_get(uint64_t) { return 0; }
 uint64_t ui_menu_create(uint64_t) { return 0; }
+int32_t ui_menu_destroy(uint64_t) { return -1; }
 int32_t ui_menu_append(uint64_t, int32_t, const char*, const char*, uint32_t) { return -1; }
 int32_t ui_menu_delete(uint64_t, int32_t) { return -1; }
 int32_t ui_menu_bar_append(uint64_t, uint64_t, const char*) { return -1; }
@@ -2205,6 +2317,7 @@ KUA_HostApi make_host_api()
     host.ui_notebook_get_page_text = &ui_notebook_get_page_text;
     host.ui_menu_bar_get = &ui_menu_bar_get;
     host.ui_menu_create = &ui_menu_create;
+    host.ui_menu_destroy = &ui_menu_destroy;
     host.ui_menu_append = &ui_menu_append;
     host.ui_menu_delete = &ui_menu_delete;
     host.ui_menu_bar_append = &ui_menu_bar_append;

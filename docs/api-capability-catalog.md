@@ -66,6 +66,7 @@ Each KUA call should map to an existing native method/event or a mechanical sequ
 | precise menu callback unbind | Remove only KUA's own `wxEVT_MENU` handler for its ID | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
 | menu-bar insert/list/label | Query and insert top-level menus and read/change their titles | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
 | menu item insert/separator/state/label | Insert normal/check/radio items, separators, enable/check them and read/write labels | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| KUA menu ownership/disposal | Destroy detached KUA menus; reject destruction while attached or borrowed; reclaim detached menus on editor/host teardown | Implemented; exact-head live-editor smoke pending. |
 | `ui_text_ctrl_*` | Read/write native `wxTextCtrl` values | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
 | `ui_check_box_*` | Read/write native `wxCheckBox` state | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
 | `ui_choice_*` | Append/clear items, count, select and read selected text | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
@@ -94,6 +95,10 @@ The append-only notebook page operations were merged in [PR #9](https://github.c
 Exact-head Linux, Windows and macOS fast validation [run 45488137860](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45488137860) passed. Exact-source live-editor validation [run 45488120370](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45488120370) passed. Both Eeschema (`editor=1`) and PCB Editor (`editor=2`) emitted `native-ui-ready` with `aui_ops=1`, `notebook_ops=1`, `menu_ops=1` and `menu_dispatch=1`; AUI owner-lifetime, sizer, window/control, property-grid and event binding checks also passed.
 
 The smoke covers `GetPane` state/direction/layer/flags, hide/show, perspective size-query and save/load round-trip, inserting a previously unmanaged window, repositioning an already-managed pane, invalid insert-level rejection, detach/destruction and stale-handle invalidation. The artifact [14964718370](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45488120370/artifacts/14964718370) contains both KIFACE proxies, the smoke extension and the two editor logs. The job completed in 168 seconds; KUA proxy and smoke-extension compilation took 11 and 2 seconds respectively. The exact-source official KiCad nightly package was used; no KiCad or GAL source build was run.
+
+### PR #11 menu ownership and disposal evidence
+
+[PR #11](https://github.com/Uhrendoktor/kicad-unstable-api/pull/11) adds an append-only `ui_menu_destroy` call and tracks whether a menu was created/transferred to KUA or is still attached to its wxMenuBar. Destruction is rejected for attached or borrowed menus. `wxMenuBar::Remove` transitions the existing menu handle back to detached ownership. KUA disposes detached owned menus when their editor frame is destroyed and removes/destroys attached KUA-owned menus during KIFACE shutdown. Exact fast matrix and both live editor smoke results are pending.
 
 ## 3. Native windows and controls
 
@@ -180,6 +185,8 @@ Expose wxMenuBar/wxMenu methods and events so plugins can insert their own menu 
 - `UI.Menu.BindEvent/UnbindEvent(frame, menu_id, callback_id)`
 
 Menu-bar bindings expose count/index lookup, insertion, title get/set, append and removal. Menu bindings expose item count, insertion of normal/check/radio items, separator append/insert, enable/check state get/set, and label get/set. Item operations validate IDs and checkability; menu-bar append/insert reject menus created for another editor or menus already attached to a menu bar. All calls execute on the editor GUI thread.
+
+Menu lifetime is explicit: `ui_menu_create` returns a KUA-owned detached menu. Append/Insert transfer it to wxMenuBar ownership. Remove detaches it and transfers ownership back to the KUA handle; extensions should retain the handle returned by Create or obtain it through GetMenu before removal. `ui_menu_destroy` accepts only detached owned menus and rejects attached/borrowed handles. Detached owned menus are reclaimed on editor destruction; KIFACE shutdown removes and destroys KUA-owned menus still attached to a live editor bar. Native KiCad menus returned by GetMenu are borrowed until Remove transfers ownership.
 
 Use unique IDs. Menu callbacks use a per-binding wxEvtHandler object attached to the target frame; dispatch is independent of wxCommandEvent::GetEventObject(), which wxWidgets sets to the source wxMenu. Unbinding removes only the matching handler object and ID, leaving unrelated KiCad or plugin handlers intact. Editor close and extension shutdown disconnect outstanding KUA menu handlers before their callback state is released.
 

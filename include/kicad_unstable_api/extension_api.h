@@ -260,6 +260,11 @@ typedef struct KUA_HostApi
     int32_t (*ui_window_set_position)(uint64_t window, int32_t x, int32_t y);
     int32_t (*ui_window_get_position)(uint64_t window, int32_t* x, int32_t* y);
 
+    /* ui_menu_create returns a KUA-owned detached menu. Append/Insert transfer
+       ownership to wxMenuBar; Remove detaches it and transfers ownership back.
+       GetMenu returns a borrowed handle unless the menu originated from KUA. */
+    /* Call ui_menu_destroy only while the menu is detached. Attached menus are
+       owned by wxMenuBar and are never deleted by the extension API. */
     /* Native wxMenuBar and wxMenu composition/state operations. */
     int32_t (*ui_menu_bar_get_menu_count)(uint64_t menu_bar);
     uint64_t (*ui_menu_bar_get_menu)(uint64_t menu_bar, uint32_t index);
@@ -303,6 +308,9 @@ typedef struct KUA_HostApi
     int32_t (*ui_aui_save_perspective)(uint64_t manager, char* buffer, uint32_t capacity);
     int32_t (*ui_aui_load_perspective)(uint64_t manager,
                                        const char* perspective, int32_t update);
+
+    /* Destroy a KUA-owned detached menu. Attached or borrowed menus are rejected. */
+    int32_t (*ui_menu_destroy)(uint64_t menu);
 } KUA_HostApi;
 
 typedef struct KUA_ExtensionApi

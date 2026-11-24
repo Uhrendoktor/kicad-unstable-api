@@ -110,7 +110,10 @@ _Static_assert(offsetof(KUA_HostApi, ui_aui_save_perspective) >
                "AUI perspective save must follow pane operations");
 _Static_assert(offsetof(KUA_HostApi, ui_aui_load_perspective) >
                    offsetof(KUA_HostApi, ui_aui_save_perspective),
-               "AUI perspective load must follow save");
+               "AUI perspective load ordering changed");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_destroy) >
+                   offsetof(KUA_HostApi, ui_aui_load_perspective),
+               "Menu lifecycle destroy must append after all prior APIs");
 _Static_assert(offsetof(KUA_HostApi, ui_property_grid_delete) >
                    offsetof(KUA_HostApi, ui_property_grid_get_string),
                "Property grid methods must be appended in order");
