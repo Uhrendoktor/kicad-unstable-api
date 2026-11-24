@@ -39,6 +39,51 @@ _Static_assert(offsetof(KUA_HostApi, ui_window_enable) >
 _Static_assert(offsetof(KUA_HostApi, ui_window_get_position) >
                    offsetof(KUA_HostApi, ui_window_set_position),
                "Window geometry methods must remain in append-only order");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_bar_get_menu_count) >
+                   offsetof(KUA_HostApi, ui_window_get_position),
+               "Menu operations must append after the existing window API");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_bar_get_menu) >
+                   offsetof(KUA_HostApi, ui_menu_bar_get_menu_count),
+               "Menu-bar lookup methods must stay ordered");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_bar_insert) >
+                   offsetof(KUA_HostApi, ui_menu_bar_get_menu),
+               "Menu-bar insertion must follow lookup");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_bar_set_label) >
+                   offsetof(KUA_HostApi, ui_menu_bar_insert),
+               "Menu-bar label setter must follow insertion");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_bar_get_label) >
+                   offsetof(KUA_HostApi, ui_menu_bar_set_label),
+               "Menu-bar label getter must follow setter");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_get_item_count) >
+                   offsetof(KUA_HostApi, ui_menu_bar_get_label),
+               "Menu item methods must follow menu-bar methods");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_insert) >
+                   offsetof(KUA_HostApi, ui_menu_get_item_count),
+               "Menu insertion must follow menu count");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_append_separator) >
+                   offsetof(KUA_HostApi, ui_menu_insert),
+               "Menu separator append must follow item insertion");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_insert_separator) >
+                   offsetof(KUA_HostApi, ui_menu_append_separator),
+               "Menu separator insertion must follow append");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_enable) >
+                   offsetof(KUA_HostApi, ui_menu_insert_separator),
+               "Menu item state methods must follow construction");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_check) >
+                   offsetof(KUA_HostApi, ui_menu_enable),
+               "Menu check method order changed");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_is_enabled) >
+                   offsetof(KUA_HostApi, ui_menu_check),
+               "Menu enabled query order changed");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_is_checked) >
+                   offsetof(KUA_HostApi, ui_menu_is_enabled),
+               "Menu checked query order changed");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_set_label) >
+                   offsetof(KUA_HostApi, ui_menu_is_checked),
+               "Menu label setter order changed");
+_Static_assert(offsetof(KUA_HostApi, ui_menu_get_label) >
+                   offsetof(KUA_HostApi, ui_menu_set_label),
+               "Menu label getter must remain last in this slice");
 _Static_assert(offsetof(KUA_HostApi, ui_property_grid_delete) >
                    offsetof(KUA_HostApi, ui_property_grid_get_string),
                "Property grid methods must be appended in order");
