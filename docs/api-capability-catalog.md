@@ -72,6 +72,7 @@ Each KUA call should map to an existing native method/event or a mechanical sequ
 | `ui_window_enable/raise/set_focus` | Direct native window enable, raise and focus calls | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
 | `ui_window_set/get_size/position` | Read/write native window geometry | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
 | AUI manager owner tracking | Invalidate manager handles with `wxAuiManager::GetManagedWindow()` | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| AUI pane state/insert/perspective | Query pane flags and dock coordinates, insert relative to an existing pane, show/hide, save and load native perspectives | Implemented; exact-head live-editor smoke pending. |
 | Notebook page lifecycle | Retrieve page handles, query selection, update labels, remove pages without destroying them and explicitly delete pages | Implemented; exact-head Eeschema/PCB Editor smoke passed with `notebook_ops=1` in both editors (run 45484673610). |
 
 
