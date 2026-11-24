@@ -43,7 +43,7 @@ jobs:
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
   # The default inner loop above is capped at five minutes and never builds KiCad.
-  # Full editor smoke uses the official KiCad nightly binary package built from
+  # [exact-head smoke] Full editor smoke uses the official KiCad nightly binary package built from
   # the exact pinned source commit. Only KUA's proxies and smoke fixture compile.
   real-kicad-linux:
     if: >-
