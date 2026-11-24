@@ -14,6 +14,7 @@
 #include <wx/sizer.h>
 #include <wx/aui/aui.h>
 #include <wx/panel.h>
+#include <wx/weakref.h>
 #endif
 
 namespace
@@ -911,10 +912,22 @@ void on_window(const KUA_EditorContext* context)
     if (ui_ok && graceful_exit && std::strcmp(graceful_exit, "1") == 0 && wxTheApp)
     {
         const uint32_t editor_kind = context->editor_kind;
-        wxTheApp->CallAfter([editor_kind]() {
+        wxWeakRef<wxWindow> weak_frame(static_cast<wxWindow*>(context->frame));
+        wxTheApp->CallAfter([editor_kind, weak_frame]() mutable {
             record("graceful-exit-requested", editor_kind);
+            wxWindow* frame = weak_frame.get();
+            const bool close_requested = frame && frame->Close(true);
+            record(close_requested ? "graceful-frame-close-requested"
+                                   : "graceful-frame-close-failed",
+                   editor_kind);
             if (wxTheApp)
-                wxTheApp->ExitMainLoop();
+            {
+                // Process the close event and deferred frame destruction before
+                // ending the main loop. KiCad's OnExit drains wxPendingDelete.
+                wxYieldIfNeeded();
+                if (wxTheApp)
+                    wxTheApp->ExitMainLoop();
+            }
         });
     }
 #endif
