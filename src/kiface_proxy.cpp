@@ -1756,7 +1756,7 @@ int32_t ui_aui_save_perspective(uint64_t manager_handle, char* buffer, uint32_t 
         const size_t copied = std::min(length, static_cast<size_t>(capacity - 1));
         if (copied)
             std::memcpy(buffer, source, copied);
-        buffer[copied] = '\\0';
+        buffer[copied] = '\0';
     }
     return static_cast<int32_t>(length);
 }
