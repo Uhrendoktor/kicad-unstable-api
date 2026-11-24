@@ -55,16 +55,32 @@ def run_editor(
     log_file: Path,
     output_log: Path,
     timeout_seconds: float,
+    graceful_exit: bool = False,
+    shutdown_timeout_seconds: float = 45.0,
 ) -> None:
     environment = os.environ.copy()
     environment["KUA_SMOKE_LOG"] = str(log_file)
     environment["KICAD_ENABLE_WXTRACE"] = "1"
+    if graceful_exit:
+        environment["KUA_SMOKE_GRACEFUL_EXIT"] = "1"
     # Preserve dynamic-loader diagnostics when a real KIFACE cannot be opened.
     # glibc writes one diagnostic file per process under LD_DEBUG_OUTPUT.
     if os.environ.get("KUA_SMOKE_LD_DEBUG"):
         environment["LD_DEBUG"] = "libs,files"
         environment["LD_DEBUG_OUTPUT"] = str(output_log.with_suffix(".ld-debug"))
     command = [str(executable), *arguments]
+    if os.environ.get("KUA_SMOKE_GDB") == "1":
+        debugger = shutil.which("gdb")
+        if not debugger:
+            raise RuntimeError("KUA_SMOKE_GDB=1 but gdb is not installed.")
+        command = [
+            debugger, "--batch", "--quiet",
+            "-ex", "set pagination off",
+            "-ex", "run",
+            "-ex", "thread apply all bt full",
+            "--args", *command,
+        ]
+
     trace_log = output_log.with_suffix(".strace")
     strace = shutil.which("strace")
     if strace:
@@ -103,6 +119,43 @@ def run_editor(
                 last_content = log_file.read_text(encoding="utf-8", errors="replace") if log_file.exists() else ""
                 missing = [event for event in required_events if event not in last_content]
                 if not missing:
+                    if graceful_exit:
+                        try:
+                            exit_code = process.wait(timeout=shutdown_timeout_seconds)
+                        except subprocess.TimeoutExpired:
+                            failure = (
+                                f"{name} did not complete normal wx/KiCad shutdown after "
+                                f"top-level close events within {shutdown_timeout_seconds:.1f}s."
+                            )
+                            break
+
+                        final_content = (
+                            log_file.read_text(encoding="utf-8", errors="replace")
+                            if log_file.exists() else ""
+                        )
+                        shutdown_prefix = f"shutdown|editor={editor_kind}|"
+                        shutdown_lines = [
+                            line for line in final_content.splitlines()
+                            if line.startswith(shutdown_prefix)
+                        ]
+                        close_record = f"graceful-windows-close-requested|editor={editor_kind}|"
+                        if exit_code == 0 and close_record in final_content and shutdown_lines and all(
+                            token in shutdown_lines[-1]
+                            for token in ("attached_stale=-1", "detached_stale=-1")
+                        ):
+                            print(
+                                f"PASS: {name} exited normally through KiCad OnExit/OnKifaceEnd; "
+                                f"extension shutdown confirmed both menu handles stale."
+                            )
+                            return
+
+                        failure = (
+                            f"{name} graceful shutdown failed: exit_code={exit_code}; "
+                            f"windows_close_record={close_record in final_content}; "
+                            f"shutdown_record={shutdown_lines[-1] if shutdown_lines else '<missing>'}."
+                        )
+                        break
+
                     print(f"PASS: {name} initialized, exercised GAL overlays, and created native windows, notebook pages, an AUI pane, a menu, and Properties-grid entries.")
                     return
                 if process.poll() is not None:
@@ -158,6 +211,12 @@ def main() -> int:
     parser.add_argument("--pcbnew", type=Path, required=True, help="Matching PCB Editor executable.")
     parser.add_argument("--timeout", type=float, default=90.0)
     parser.add_argument(
+        "--graceful-exit",
+        action="store_true",
+        help="Request wx main-loop exit after the native smoke and require the KIFACE shutdown callback.",
+    )
+    parser.add_argument("--shutdown-timeout", type=float, default=45.0)
+    parser.add_argument(
         "--diagnostics-dir", type=Path,
         help="Directory in which to retain process logs and KIFACE file traces.",
     )
@@ -173,6 +232,8 @@ def main() -> int:
         parser.error("A live X11 display is required; use xvfb-run on a headless runner.")
     if args.timeout <= 0:
         parser.error("--timeout must be positive.")
+    if args.shutdown_timeout <= 0:
+        parser.error("--shutdown-timeout must be positive.")
 
     if args.install_dir and (args.eeschema_install_dir or args.pcbnew_install_dir):
         parser.error("Use either --install-dir or the two editor-specific install directories, not both.")
@@ -262,6 +323,8 @@ def main() -> int:
                 temp_root / f"{label}-extension.log",
                 temp_root / f"{label}-process.log",
                 args.timeout,
+                args.graceful_exit,
+                args.shutdown_timeout,
             )
 
         succeeded = True

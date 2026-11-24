@@ -4,16 +4,19 @@
 #include <cstring>
 #include <string>
 #include <cstdlib>
+#include <vector>
 
 #if defined(KUA_SMOKE_WITH_WX)
 #include <wx/app.h>
 #include <wx/event.h>
+#include <wx/dialog.h>
 #include <wx/notebook.h>
 #include <wx/frame.h>
 #include <wx/menu.h>
 #include <wx/sizer.h>
 #include <wx/aui/aui.h>
 #include <wx/panel.h>
+#include <wx/weakref.h>
 #endif
 
 namespace
@@ -27,6 +30,9 @@ uint64_t g_last_destroy_event_handle = 0;
 uint64_t g_managed_aui_manager_handle = 0;
 int g_aui_manager_destroy_callback_result = 0;
 bool g_expect_aui_manager_destroy = false;
+uint32_t g_editor_kind = KUA_EDITOR_UNKNOWN;
+uint64_t g_shutdown_attached_menu = 0;
+uint64_t g_shutdown_detached_menu = 0;
 
 #if defined(KUA_SMOKE_WITH_WX)
 class KuaSmokeManagedAuiPanel final : public wxPanel
@@ -87,6 +93,130 @@ void record(const char* event, uint32_t editor_kind, const char* details = "")
     }
 }
 
+#if defined(KUA_SMOKE_WITH_WX)
+void graceful_close_top_level_windows(uint32_t editor_kind,
+                                      wxWeakRef<wxWindow> weak_frame,
+                                      bool modal_loop_was_ended = false)
+{
+    if (!wxTheApp)
+        return;
+
+    if (modal_loop_was_ended)
+        record("graceful-modal-dialog-loop-unwound", editor_kind);
+
+    // KiCad's setup wizard runs a nested modal loop. Close(true) dispatches
+    // wxEVT_WIZARD_CANCEL, whose KiCad handler opens a confirmation dialog.
+    // End the modal dialog directly, then continue after RunWizard() unwinds.
+    for (wxWindowList::compatibility_iterator node = wxTopLevelWindows.GetFirst();
+         node; node = node->GetNext())
+    {
+        wxWindow* window = node->GetData();
+        auto* dialog = dynamic_cast<wxDialog*>(window);
+        if (!dialog || !dialog->IsModal())
+            continue;
+
+        const wxClassInfo* info = window->GetClassInfo();
+        wxString class_name("unknown");
+        if (info)
+            class_name = info->GetClassName();
+        const auto class_utf8 = class_name.utf8_str();
+        char details[160]{};
+        std::snprintf(details, sizeof(details), "class=%s",
+                      class_utf8.data() ? class_utf8.data() : "unknown");
+        record("graceful-modal-dialog-end-begin", editor_kind, details);
+        dialog->EndModal(wxID_CANCEL);
+        record("graceful-modal-dialog-end-requested", editor_kind, details);
+        wxTheApp->CallAfter([editor_kind, weak_frame]() mutable {
+            graceful_close_top_level_windows(editor_kind, weak_frame, true);
+        });
+        return;
+    }
+
+    // Process the deferred wizard Destroy() that KiCad issues immediately
+    // after RunWizard() returns, before enumerating the remaining frames.
+    wxYieldIfNeeded();
+    std::vector<wxWeakRef<wxWindow>> top_level_windows;
+    for (wxWindowList::compatibility_iterator node = wxTopLevelWindows.GetFirst();
+         node; node = node->GetNext())
+    {
+        if (wxWindow* window = node->GetData())
+            top_level_windows.emplace_back(window);
+    }
+
+    int32_t close_requested = 0;
+    int32_t close_failed = 0;
+    // Close modal/auxiliary windows before the active editor frame.
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (size_t index = 0; index < top_level_windows.size(); ++index)
+        {
+            wxWeakRef<wxWindow>& weak_window = top_level_windows[index];
+            wxWindow* window = weak_window.get();
+            if (!window || window->IsBeingDeleted())
+                continue;
+
+            const bool is_editor_frame = window == weak_frame.get();
+            if ((pass == 0 && is_editor_frame) || (pass == 1 && !is_editor_frame))
+                continue;
+
+            const wxClassInfo* class_info = window->GetClassInfo();
+            wxWindow* parent = window->GetParent();
+            const wxClassInfo* parent_info = parent ? parent->GetClassInfo() : nullptr;
+            wxString class_name("unknown");
+            if (class_info)
+                class_name = class_info->GetClassName();
+            wxString parent_class("none");
+            if (parent_info)
+                parent_class = parent_info->GetClassName();
+            const auto class_utf8 = class_name.utf8_str();
+            const auto parent_utf8 = parent_class.utf8_str();
+            char details[256]{};
+            std::snprintf(details, sizeof(details),
+                          "index=%zu|class=%s|parent=%s|shown=%d|editor_frame=%d",
+                          index,
+                          class_utf8.data() ? class_utf8.data() : "unknown",
+                          parent_utf8.data() ? parent_utf8.data() : "none",
+                          window->IsShown() ? 1 : 0,
+                          is_editor_frame ? 1 : 0);
+            record("graceful-window-close-begin", editor_kind, details);
+
+            const bool close_ok = window->Close(true);
+            if (close_ok)
+            {
+                ++close_requested;
+                record("graceful-window-close-requested", editor_kind, details);
+            }
+            else
+            {
+                ++close_failed;
+                record("graceful-window-close-failed", editor_kind, details);
+            }
+
+            wxYieldIfNeeded();
+            wxWindow* remaining = weak_window.get();
+            char processed[256]{};
+            std::snprintf(processed, sizeof(processed),
+                          "index=%zu|closed=%d|weak_alive=%d|being_deleted=%d",
+                          index, close_ok ? 1 : 0, remaining ? 1 : 0,
+                          remaining && remaining->IsBeingDeleted() ? 1 : 0);
+            record("graceful-window-close-processed", editor_kind, processed);
+        }
+    }
+
+    char close_details[128]{};
+    std::snprintf(close_details, sizeof(close_details),
+                  "top_level=%zu|close_requested=%d|close_failed=%d",
+                  top_level_windows.size(), close_requested, close_failed);
+    record(close_requested > 0 && close_failed == 0
+               ? "graceful-windows-close-requested"
+               : "graceful-windows-close-failed",
+           editor_kind, close_details);
+    if (wxTheApp)
+        wxTheApp->ExitMainLoop();
+}
+#endif
+
+
 int initialize(const KUA_HostApi* host)
 {
     record("initialize-entered", host ? host->editor_kind : static_cast<uint32_t>(KUA_EDITOR_UNKNOWN));
@@ -103,6 +233,9 @@ int initialize(const KUA_HostApi* host)
     }
 
     g_host = host;
+    g_editor_kind = host->editor_kind;
+    g_shutdown_attached_menu = 0;
+    g_shutdown_detached_menu = 0;
     record("initialize", host->editor_kind, host->host_build_tag ? host->host_build_tag : "");
     return 1;
 }
@@ -664,6 +797,12 @@ void on_window(const KUA_EditorContext* context)
     const int32_t menu_attached = menu_item > 0
         ? g_host->ui_menu_bar_append(menu_bar, menu, "KUA Smoke")
         : -1;
+    const uint64_t shutdown_detached_menu = menu_bar
+        ? g_host->ui_menu_create(frame_window) : 0;
+    const int32_t shutdown_detached_item = shutdown_detached_menu
+        ? g_host->ui_menu_append(shutdown_detached_menu, 61020, "Shutdown cleanup probe", "",
+                                 KUA_UI_MENU_NORMAL) : -1;
+    g_shutdown_detached_menu = shutdown_detached_item > 0 ? shutdown_detached_menu : 0;
     const int32_t attached_menu_destroy_rejected = menu_attached > 0
         ? g_host->ui_menu_destroy(menu) : -2;
     const int32_t duplicate_menu_append = menu_attached > 0
@@ -738,6 +877,9 @@ void on_window(const KUA_EditorContext* context)
     const uint64_t inserted_bar_menu = menu_bar ? g_host->ui_menu_create(frame_window) : 0;
     const int32_t menu_bar_insert = inserted_bar_menu
         ? g_host->ui_menu_bar_insert(menu_bar, 0, inserted_bar_menu, "KUA First") : -1;
+    // This menu remains attached after the later Remove-then-destroy test removes
+    // the original KUA Smoke menu from the end of the bar.
+    g_shutdown_attached_menu = menu_bar_insert > 0 ? inserted_bar_menu : 0;
     const int32_t menu_bar_count_after_insert = menu_bar_insert > 0
         ? g_host->ui_menu_bar_get_menu_count(menu_bar) : -1;
     const uint64_t first_bar_menu = menu_bar_count_after_insert > 0
@@ -885,11 +1027,25 @@ void on_window(const KUA_EditorContext* context)
                        sizer_replacement_ok && sizer_owner_destroyed_ok && sizer_ownership_ok &&
                        aui_owner_lifetime_ok && pane_added > 0 && aui_updated > 0 &&
                        pane_detached > 0 && aui_ops_ok &&
-                       menu_attached > 0 && menu_ops_ok && menu_binding != 0 && menu_dispatch_ok &&
+                       menu_attached > 0 && menu_ops_ok && shutdown_detached_item > 0 &&
+                       menu_binding != 0 && menu_dispatch_ok &&
                        menu_unbound > 0 && menu_lifetime_ok &&
                        (!property_grid || property_result > 0);
     record(ui_ok ? "native-ui-ready" : "native-ui-failed",
            context->editor_kind, ui_details);
+#if defined(KUA_SMOKE_WITH_WX)
+    const char* graceful_exit = std::getenv("KUA_SMOKE_GRACEFUL_EXIT");
+    if (ui_ok && graceful_exit && std::strcmp(graceful_exit, "1") == 0 && wxTheApp)
+    {
+        const uint32_t editor_kind = context->editor_kind;
+        wxWeakRef<wxWindow> weak_frame(static_cast<wxWindow*>(context->frame));
+        wxTheApp->CallAfter([editor_kind, weak_frame]() mutable {
+            record("graceful-exit-requested", editor_kind);
+            wxTheApp->SetExitOnFrameDelete(true);
+            graceful_close_top_level_windows(editor_kind, weak_frame);
+        });
+    }
+#endif
 }
 
 void on_menu_command(void* user_data)
@@ -906,7 +1062,17 @@ void on_reset(uint32_t editor_kind)
 
 void shutdown()
 {
-    record("shutdown", g_host ? g_host->editor_kind : KUA_EDITOR_UNKNOWN);
+    const int32_t attached_stale = g_host && g_host->ui_menu_get_item_count &&
+                                   g_shutdown_attached_menu
+        ? g_host->ui_menu_get_item_count(g_shutdown_attached_menu) : -999;
+    const int32_t detached_stale = g_host && g_host->ui_menu_get_item_count &&
+                                   g_shutdown_detached_menu
+        ? g_host->ui_menu_get_item_count(g_shutdown_detached_menu) : -999;
+    char details[128]{};
+    std::snprintf(details, sizeof(details),
+                  "attached_stale=%d|detached_stale=%d",
+                  attached_stale, detached_stale);
+    record("shutdown", g_editor_kind, details);
 }
 
 const KUA_ExtensionApi api{
