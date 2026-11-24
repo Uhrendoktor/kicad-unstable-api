@@ -60,10 +60,16 @@ Each KUA call should map to an existing native method/event or a mechanical sequ
 | `overlay_line/circle/rectangle` | Initial GAL primitives | Implemented |
 | `KUA_EditorContext.frame/canvas/view` | Borrowed editor handles | Implemented |
 | extension lifecycle callbacks | Initialize, editor-created, reset and shutdown | Implemented |
-| `ui_window_get_top_level_windows` | Enumerate top-level windows owned by an editor frame | Unverified |
-| `ui_window_observe/unobserve` | Observe native window show/hide/destroy events without consuming KiCad events | Unverified |
-| native window destroy tracking | Invalidate window and owned sizer/property handles when the wxWindow is destroyed | Unverified |
-| precise menu callback unbind | Remove only KUA's own `wxEVT_MENU` handler for its ID | Unverified |
+| `ui_window_get_top_level_windows` | Enumerate top-level windows owned by an editor frame | Implemented; live-editor acceptance pending |
+| `ui_window_observe/unobserve` | Observe native window show/hide/destroy events without consuming KiCad events | Implemented; live-editor acceptance pending |
+| native window destroy tracking | Invalidate window and owned sizer/property handles when the wxWindow is destroyed | Implemented; live-editor acceptance pending |
+| precise menu callback unbind | Remove only KUA's own `wxEVT_MENU` handler for its ID | Implemented; exact-build smoke pending |
+| `ui_text_ctrl_*` | Read/write native `wxTextCtrl` values | Implemented; exact-build smoke pending |
+| `ui_check_box_*` | Read/write native `wxCheckBox` state | Implemented; exact-build smoke pending |
+| `ui_choice_*` | Append/clear items, count, select and read selected text | Implemented; exact-build smoke pending |
+| `ui_window_enable/raise/set_focus` | Direct native window enable, raise and focus calls | Implemented; exact-build smoke pending |
+| `ui_window_set/get_size/position` | Read/write native window geometry | Implemented; exact-build smoke pending |
+| AUI manager owner tracking | Invalidate manager handles with `wxAuiManager::GetManagedWindow()` | Implemented; exact-build smoke pending |
 
 ## 3. Native windows and controls
 
@@ -87,7 +93,11 @@ Expose wxWidgets windows and controls so plugins can create native subwindows in
 
 The current native binding slice adds `ui_window_get_top_level_windows(editor_frame, handles, capacity)`, which lists top-level wxWindows whose parent chain leads to the given editor. This includes native modal Properties dialogs parented to that editor. It also adds `ui_window_observe(editor_frame, callback, user_data)` / `ui_window_unobserve(observer)`. Observers receive opaque handles and one of `KUA_UI_WINDOW_SHOWN`, `KUA_UI_WINDOW_HIDDEN` or `KUA_UI_WINDOW_DESTROYING`. The observer is a thin `wxEventFilter` over existing wxWidgets events; it always returns `Event_Skip` so KiCad continues processing them normally. Notifications run on the GUI thread. A handle received for `DESTROYING` is valid only during that callback.
 
-Every registered native window has a `wxEVT_DESTROY` cleanup hook. Destroying a window invalidates its window handle and handles for resources owned by that window, including an attached sizer or property grid. Owner-bound native handles are revoked before `DESTROYING` observers run: wxWidgets emits `wxEVT_DESTROY` from the base window destructor, after derived members such as a member-owned `wxAuiManager` have already been destroyed. The temporary window handle remains valid only for the callback; owned manager/sizer/menu handles do not. Destroying the editor invalidates all remaining handles and removes its observers. These lifetime rules apply to native windows destroyed by KiCad as well as windows explicitly destroyed through KUA.
+Every registered native window has a `wxEVT_DESTROY` cleanup hook. Destroying a window invalidates its window handle and handles for resources owned by that window, including an attached sizer or property grid. Owner-bound native handles are revoked before `DESTROYING` observers run: wxWidgets emits `wxEVT_DESTROY` from the base window destructor, after derived members such as a member-owned `wxAuiManager` have already been destroyed. The temporary window handle remains valid only for the callback; owned manager/sizer/menu handles do not. Destroying the editor invalidates all remaining handles and removes its observers. These lifetime rules apply to native windows destroyed by KiCad as well as windows explicitly destroyed through KUA. `ui_window_get_handle()` can wrap a borrowed native window only when its parent chain belongs to a registered KiCad editor frame.
+
+The initial control operations are direct wxWidgets calls: `ui_text_ctrl_set/get_value`, `ui_check_box_set/get_value`, and `ui_choice_append/clear/get_count/set/get_selection/get_string_selection`. Common window operations expose enable, raise, focus, and size/position get/set. Wrong control classes and stale handles are rejected; these calls do not create KUA-owned widgets. The pinned live smoke round-trips text, checkbox and choice state, then reads back a requested window position and size.
+
+AUI manager handles are associated with `wxAuiManager::GetManagedWindow()`, not merely the editor frame passed by the caller, so destroying a child managed window invalidates the manager handle.
 
 Supported control kinds should include wxDialog, wxFrame, wxPanel, wxNotebook, wxButton, wxTextCtrl, wxChoice, wxCheckBox, wxStaticText, wxListCtrl, wxTreeCtrl, wxGrid and wxPropertyGrid. Add native wxWidgets control types as required; do not create feature-specific KUA widgets.
 

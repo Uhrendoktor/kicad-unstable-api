@@ -86,6 +86,8 @@ jobs:
           cmake -S . -B build/smoke-extension -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DKUA_SMOKE_WITH_WX=ON
           cmake --build build/smoke-extension --target kua_real_smoke_extension --parallel
       - name: Run real Eeschema and PCB Editor GAL smoke test
+        env:
+          KUA_SMOKE_LD_DEBUG: "1"
         run: |
           xvfb-run -a -s "-screen 0 1920x1080x24" python3 tools/smoke_real_kicad.py \
             --eeschema-install-dir /tmp/kicad-build/eeschema \
