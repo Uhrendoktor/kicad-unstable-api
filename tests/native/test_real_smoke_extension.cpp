@@ -487,11 +487,87 @@ void on_window(const KUA_EditorContext* context)
         ? g_host->ui_aui_add_pane(manager, panel, &pane)
         : -1;
     const int32_t aui_updated = pane_added > 0 ? g_host->ui_aui_update(manager) : -1;
+
+    KUA_AuiPaneState pane_state{};
+    pane_state.struct_size = sizeof(pane_state);
+    const int32_t pane_state_read = pane_added > 0
+        ? g_host->ui_aui_get_pane_state(manager, panel, &pane_state) : -1;
+    const int32_t pane_hidden = pane_added > 0
+        ? g_host->ui_aui_pane_show(manager, panel, 0) : -1;
+    const int32_t pane_hide_update = pane_hidden > 0 ? g_host->ui_aui_update(manager) : -1;
+    KUA_AuiPaneState hidden_pane_state{};
+    hidden_pane_state.struct_size = sizeof(hidden_pane_state);
+    const int32_t hidden_pane_state_read = pane_hidden > 0
+        ? g_host->ui_aui_get_pane_state(manager, panel, &hidden_pane_state) : -1;
+    const int32_t pane_shown = pane_hidden > 0
+        ? g_host->ui_aui_pane_show(manager, panel, 1) : -1;
+    const int32_t pane_show_update = pane_shown > 0 ? g_host->ui_aui_update(manager) : -1;
+    KUA_AuiPaneState shown_pane_state{};
+    shown_pane_state.struct_size = sizeof(shown_pane_state);
+    const int32_t shown_pane_state_read = pane_shown > 0
+        ? g_host->ui_aui_get_pane_state(manager, panel, &shown_pane_state) : -1;
+
+    const int32_t perspective_size = manager
+        ? g_host->ui_aui_save_perspective(manager, nullptr, 0) : -1;
+    char saved_perspective[8192]{};
+    const int32_t perspective_written = perspective_size > 0 &&
+                                        perspective_size < static_cast<int32_t>(sizeof(saved_perspective))
+        ? g_host->ui_aui_save_perspective(manager, saved_perspective,
+                                          sizeof(saved_perspective)) : -1;
+    const int32_t perspective_loaded = perspective_written == perspective_size
+        ? g_host->ui_aui_load_perspective(manager, saved_perspective, 1) : -1;
+
+    const uint64_t insert_panel = frame_window
+        ? g_host->ui_window_create(frame_window, KUA_UI_WINDOW_PANEL, -1,
+                                   "KUA AUI insert smoke", 0) : 0;
+    KUA_AuiPaneOptions insert_options = pane;
+    insert_options.name = "KUA_AuiInsertSmoke";
+    insert_options.caption = "KUA AUI insert smoke";
+    insert_options.direction = KUA_AUI_LEFT;
+    const int32_t insert_panel_added = manager && insert_panel
+        ? g_host->ui_aui_add_pane(manager, insert_panel, &insert_options) : -1;
+    const int32_t pane_inserted = insert_panel_added > 0
+        ? g_host->ui_aui_insert_pane(manager, insert_panel, panel, KUA_AUI_INSERT_PANE) : -1;
+    const int32_t insert_update = pane_inserted > 0 ? g_host->ui_aui_update(manager) : -1;
+    KUA_AuiPaneState inserted_pane_state{};
+    inserted_pane_state.struct_size = sizeof(inserted_pane_state);
+    const int32_t inserted_pane_state_read = insert_panel_added > 0
+        ? g_host->ui_aui_get_pane_state(manager, insert_panel, &inserted_pane_state) : -1;
+    const int32_t insert_panel_detached = insert_panel_added > 0
+        ? g_host->ui_aui_detach_pane(manager, insert_panel) : -1;
+    if (insert_panel_detached > 0)
+        g_host->ui_aui_update(manager);
+    const int32_t insert_panel_destroyed = insert_panel
+        ? g_host->ui_window_destroy(insert_panel) : -1;
+#if defined(KUA_SMOKE_WITH_WX)
+    if (insert_panel_destroyed > 0)
+        wxYieldIfNeeded();
+#endif
+    char inserted_panel_class[64]{};
+    const int32_t insert_panel_stale = insert_panel
+        ? g_host->ui_window_get_class_name(insert_panel, inserted_panel_class,
+                                           sizeof(inserted_panel_class)) : -1;
+
     const int32_t pane_detached = pane_added > 0
         ? g_host->ui_aui_detach_pane(manager, panel)
         : -1;
     if (pane_detached > 0)
         g_host->ui_aui_update(manager);
+
+    const int aui_ops_ok =
+        pane_state_read > 0 && pane_state.is_ok == 1 && pane_state.is_shown == 1 &&
+        pane_state.direction == KUA_AUI_RIGHT && pane_state.layer == 1 &&
+        pane_state.is_movable == 1 && pane_state.is_resizable == 1 &&
+        pane_hidden > 0 && pane_hide_update > 0 && hidden_pane_state_read > 0 &&
+        hidden_pane_state.is_shown == 0 &&
+        pane_shown > 0 && pane_show_update > 0 && shown_pane_state_read > 0 &&
+        shown_pane_state.is_shown == 1 &&
+        perspective_size > 0 && perspective_written == perspective_size &&
+        perspective_loaded > 0 &&
+        insert_panel_added > 0 && pane_inserted > 0 && insert_update > 0 &&
+        inserted_pane_state_read > 0 && inserted_pane_state.is_ok == 1 &&
+        insert_panel_detached > 0 && insert_panel_destroyed > 0 &&
+        insert_panel_stale == -1;
 
     int aui_owner_lifetime_ok = 1;
 #if defined(KUA_SMOKE_WITH_WX)
@@ -715,7 +791,7 @@ void on_window(const KUA_EditorContext* context)
 
     char ui_details[1024]{};
     std::snprintf(ui_details, sizeof(ui_details),
-                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|notebook_ops=%d|class=%d|controls=%d|text=%d|checkbox=%d|choice=%d|window_ops=%d|sizer_replace=%d|sizer_destroy=%d|sizer_ownership=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|menu_ops=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
+                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|notebook_ops=%d|class=%d|controls=%d|text=%d|checkbox=%d|choice=%d|window_ops=%d|sizer_replace=%d|sizer_destroy=%d|sizer_ownership=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|aui_ops=%d|menu_ops=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
                   frame_window != 0, top_level_initial, dialog != 0, dialog_shown, dialog_hidden,
                   dialog_enumerated, dialog_destroyed, stale_dialog_handle, destroy_probe != 0,
                   destroy_probe_result, stale_destroy_probe, g_destroy_event_handle_valid,
@@ -725,7 +801,7 @@ void on_window(const KUA_EditorContext* context)
                   native_controls_ok, text_control_ok, check_box_ok, choice_control_ok,
                   common_window_ops_ok, sizer_replacement_ok, sizer_owner_destroyed_ok,
                   sizer_ownership_ok, manager != 0, aui_owner_lifetime_ok, pane_added,
-                  aui_updated, pane_detached, menu_attached, menu_ops_ok, menu_binding != 0, menu_dispatch_ok,
+                  aui_updated, pane_detached, menu_attached, aui_ops_ok, menu_ops_ok, menu_binding != 0, menu_dispatch_ok,
                   menu_callback_count, menu_unbound, property_result);
     const bool ui_ok = frame_window && top_level_initial > 0 && window_observer &&
                        dialog && dialog_shown > 0 && dialog_hidden > 0 && dialog_enumerated &&
@@ -739,7 +815,8 @@ void on_window(const KUA_EditorContext* context)
                        std::string(class_name).find("wxNotebook") != std::string::npos &&
                        native_controls_ok &&
                        sizer_replacement_ok && sizer_owner_destroyed_ok && sizer_ownership_ok &&
-                       aui_owner_lifetime_ok && pane_added > 0 && aui_updated > 0 && pane_detached > 0 &&
+                       aui_owner_lifetime_ok && pane_added > 0 && aui_updated > 0 &&
+                       pane_detached > 0 && aui_ops_ok &&
                        menu_attached > 0 && menu_ops_ok && menu_binding != 0 && menu_dispatch_ok &&
                        menu_unbound > 0 && (!property_grid || property_result > 0);
     record(ui_ok ? "native-ui-ready" : "native-ui-failed",
