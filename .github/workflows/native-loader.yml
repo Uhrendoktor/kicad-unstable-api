@@ -56,17 +56,25 @@ jobs:
     name: Exact-source KiCad nightly runtime and live-editor smoke
     runs-on: ubuntu-24.04
     container: ubuntu:26.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       KICAD_SOURCE_SHA: b7066f886375b186ca8fa469de3a6382f6bba400
       KICAD_NIGHTLY_PACKAGE_VERSION: 202611231147+b7066f8863~190~ubuntu26.04.1
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install compiler, CMake and KiCad build prerequisites
+      - name: Refresh Ubuntu package index
+        timeout-minutes: 4
         run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          timeout 210s apt-get -o Acquire::http::Timeout=30 \
+            -o Acquire::https::Timeout=30 -o Acquire::Retries=2 update
+
+      - name: Install compiler, CMake and KiCad build prerequisites
+        timeout-minutes: 7
+        run: |
+          timeout 390s env DEBIAN_FRONTEND=noninteractive apt-get \
+            -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 \
+            -o Acquire::Retries=2 -o Dpkg::Use-Pty=0 install -y --no-install-recommends \
             ca-certificates curl build-essential cmake ninja-build git \
             gettext pkg-config glslang-tools libbz2-dev libcairo2-dev libglu1-mesa-dev \
             libgl1-mesa-dev libglew-dev libx11-dev libwxgtk3.2-dev \
