@@ -4,21 +4,27 @@ This document turns the use-case matrix into an implementation and verification 
 
 ## Design rule
 
-KUA extends KiCad's IPC surface with bindings to existing native KiCad and wxWidgets behavior. The per-build C++ adapter maps IPC calls to native methods/events. Plugins retain their own UI composition, workflows, data models, metadata, persistence and business logic. KUA provides transport, conversion, safe handles, GUI-thread dispatch and version-specific native invocation.
+The target is a capability-oriented binding layer over existing KiCad and wxWidgets behavior. The current prototype exposes native calls through a versioned, in-process C ABI (`KUA_HostApi`) consumed by native extension modules loaded into KiCad. The per-build C++ adapter maps those calls to native methods/events, validates opaque handles and dispatches GUI operations on the editor thread.
+
+The C ABI is not an IPC/RPC transport. The repository does not yet implement an external server/client, socket or message transport, or typed wire conversion for out-of-process Python/Rust clients. That transport is a separate future layer and must not be described as already implemented. Plugins retain their own UI composition, workflows, data models, metadata, persistence and business logic.
 
 ```text
-KiCad starts normally
+KiCad process
   -> KIWAY loads _eeschema / _pcbnew
     -> KIFACE proxy loads the preserved original module
     -> proxy forwards the complete KIFACE interface
     -> native host discovers extensions and attaches to editor windows
        -> per-build KiCad adapter (C++ / wxWidgets / GAL / tools)
-       -> stable KUA C ABI (extension-facing)
-       -> extensions: Blocks | JLCPCB | Clippy
-          -> existing Python/Rust application services over IPC or local RPC
+       -> KUA_HostApi (in-process C ABI)
+       -> native extension modules: Blocks | JLCPCB | Clippy
+
+Future boundary (not implemented)
+  external Python/Rust clients
+    -> IPC/RPC transport + typed wire conversion
+    -> in-process KUA native bridge
 ```
 
-Do not make every extension depend directly on KiCad's C++ ABI. Only the per-build adapter should do that. Expose capability-oriented operations and opaque handles through KUA.
+Do not make every native extension depend directly on KiCad's C++ ABI. Only the per-build adapter should do that. Expose capability-oriented operations and opaque handles through the C ABI; design any future external transport as a separate boundary.
 
 ## Native KiCad behavior required by the three projects
 
@@ -42,7 +48,7 @@ Do not make every extension depend directly on KiCad's C++ ABI. Only the per-bui
 
 ## Proposed extension-facing API groups
 
-The C ABI should expose these groups using versioned structs, fixed-width scalars, UTF-8 strings, opaque handles and function pointers. Never pass KiCad or wxWidgets C++ objects by value across the boundary.
+The in-process native extension ABI exposes these groups using versioned structs, fixed-width scalars, UTF-8 strings, opaque handles and function pointers. Never pass KiCad or wxWidgets C++ objects by value across the boundary. Any future out-of-process IPC/RPC API needs its own wire-safe schema and conversion layer; native pointers and ABI structs must not cross that transport.
 
 ### 1. Host and editor context
 - Host build fingerprint: KiCad version, source commit/build ID if available, platform, architecture, compiler/runtime ABI, wxWidgets version, KUA ABI.

@@ -32,6 +32,14 @@ target_include_directories(kua_real_smoke_extension PRIVATE include)
 set_target_properties(kua_real_smoke_extension PROPERTIES
     PREFIX "" OUTPUT_NAME "kua_real_smoke_extension")
 
+option(KUA_SMOKE_WITH_WX "Build the real-editor smoke extension against wxWidgets" OFF)
+if(KUA_SMOKE_WITH_WX)
+    find_package(wxWidgets REQUIRED COMPONENTS core base)
+    include(${wxWidgets_USE_FILE})
+    target_compile_definitions(kua_real_smoke_extension PRIVATE KUA_SMOKE_WITH_WX=1)
+    target_link_libraries(kua_real_smoke_extension PRIVATE ${wxWidgets_LIBRARIES})
+endif()
+
 foreach(editor eeschema pcbnew)
     add_library(kua_original_${editor} MODULE tests/native/original_kiface.cpp)
     target_include_directories(kua_original_${editor} PRIVATE tests/native)
