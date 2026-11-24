@@ -218,6 +218,29 @@ void remove_menu_bindings_for_window(wxWindow* frame)
 
 void clear_window_observers_for_frame(wxWindow* frame);
 
+void invalidate_ui_owner_handles(wxWindow* owner_window)
+{
+    if (!owner_window)
+        return;
+
+    // A native owner may destroy non-window members (for example a
+    // wxAuiManager stored in the managed wxWindow) before its base wxWindow
+    // destructor emits wxEVT_DESTROY. Revoke those borrowed handles before
+    // invoking extension observers; retain the window's own handle so the
+    // DESTROYING callback can inspect the native window itself.
+    for (auto it = g_ui_handles.begin(); it != g_ui_handles.end();)
+    {
+        const bool is_owner_window_handle =
+            it->second.kind == UiHandleKind::Window &&
+            it->second.pointer == owner_window;
+
+        if (it->second.owner_window == owner_window && !is_owner_window_handle)
+            it = g_ui_handles.erase(it);
+        else
+            ++it;
+    }
+}
+
 void invalidate_ui_window(wxWindow* window, bool destroying = false)
 {
     if (!window)
@@ -351,6 +374,12 @@ public:
                 observers.push_back(observer);
         }
 
+        // wxWidgets emits wxEVT_DESTROY from the base wxWindow destructor,
+        // after a derived window's members have already been destroyed. Revoke
+        // handles to owner-bound native members before extension callbacks.
+        if (destroying)
+            invalidate_ui_owner_handles(window);
+
         for (const WindowObserverEntry& observer : observers)
         {
             const uint64_t window_handle = destroying
@@ -405,11 +434,13 @@ uint64_t ui_window_get_handle(void* borrowed_window)
     if (!on_gui_thread() || !borrowed_window)
         return 0;
 
+    auto* window = static_cast<wxWindow*>(borrowed_window);
     for (const auto& [frame, state] : g_editor_frames)
     {
         (void)state;
-        if (frame == borrowed_window)
-            return register_ui_window(static_cast<wxWindow*>(frame), frame);
+        auto* editor_frame = static_cast<wxWindow*>(frame);
+        if (window_belongs_to_editor(window, editor_frame))
+            return register_ui_window(window, frame);
     }
 
     return 0;
@@ -992,11 +1023,23 @@ uint64_t ui_aui_get_manager(uint64_t window_handle)
     if (!on_gui_thread())
         return 0;
     wxWindow* window = find_ui_window(window_handle);
-    if (!window)
+    UiHandleEntry* window_entry = find_ui_handle(window_handle, UiHandleKind::Window);
+    if (!window || !window_entry || !window_entry->frame)
         return 0;
+
     wxAuiManager* manager = wxAuiManager::GetManager(window);
+    wxWindow* managed_window = manager ? manager->GetManagedWindow() : nullptr;
+    auto* editor_frame = static_cast<wxWindow*>(window_entry->frame);
+    if (!manager || !managed_window ||
+        !window_belongs_to_editor(managed_window, editor_frame))
+        return 0;
+
+    // The manager is tied to its managed window, which may be a child of the
+    // KiCad frame. Ensure native destruction invalidates this handle even when
+    // that managed window was never wrapped through another KUA call.
+    install_ui_window_destroy_hook(managed_window);
     return register_ui_handle(manager, UiHandleKind::AuiManager,
-                              g_ui_handles[window_handle].frame);
+                              window_entry->frame, managed_window);
 }
 
 int32_t ui_aui_add_pane(uint64_t manager_handle, uint64_t window_handle,
@@ -1110,7 +1153,6 @@ uint64_t ui_properties_get_grid(uint64_t panel_handle)
     return grid ? register_ui_handle(grid, UiHandleKind::PropertyGrid,
                                      panel_entry->frame, panel) : 0;
 }
-
 
 int32_t ui_property_grid_append_string(uint64_t grid_handle, const char* label,
                                        const char* name, const char* value)
