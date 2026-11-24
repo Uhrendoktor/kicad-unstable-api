@@ -309,6 +309,7 @@ void on_window(const KUA_EditorContext* context)
 
     int sizer_replacement_ok = 1;
     int sizer_owner_destroyed_ok = 1;
+    int sizer_ownership_ok = 1;
 #if defined(KUA_SMOKE_WITH_WX)
     const uint64_t old_root_sizer = g_host->ui_sizer_create(
         KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
@@ -350,6 +351,76 @@ void on_window(const KUA_EditorContext* context)
                            new_nested_added > 0 && new_sizer_attached > 0 &&
                            late_sizer_added > 0 && old_root_stale == -1 &&
                            old_nested_stale == -1 && old_deep_stale == -1;
+
+    const uint64_t sizer_owner_a = g_host->ui_window_create(
+        panel, KUA_UI_WINDOW_PANEL, -1, "KUA sizer owner A", 0);
+    const uint64_t sizer_owner_b = g_host->ui_window_create(
+        panel, KUA_UI_WINDOW_PANEL, -1, "KUA sizer owner B", 0);
+    const uint64_t sizer_owner_c = g_host->ui_window_create(
+        panel, KUA_UI_WINDOW_PANEL, -1, "KUA sizer owner C", 0);
+    const uint64_t sizer_owner_d = g_host->ui_window_create(
+        panel, KUA_UI_WINDOW_PANEL, -1, "KUA sizer owner D", 0);
+    const uint64_t sizer_foreign_window = sizer_owner_b
+        ? g_host->ui_window_create(sizer_owner_b, KUA_UI_WINDOW_BUTTON, -1, "foreign", 0)
+        : 0;
+    const uint64_t sizer_owned_window = sizer_owner_a
+        ? g_host->ui_window_create(sizer_owner_a, KUA_UI_WINDOW_BUTTON, -1, "owned", 0)
+        : 0;
+    const uint64_t window_sizer_a = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const uint64_t window_sizer_b = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const int32_t first_window_membership = window_sizer_a && sizer_owned_window
+        ? g_host->ui_sizer_add(window_sizer_a, sizer_owned_window, 0, 0, 0) : -1;
+    const int32_t duplicate_window_membership = window_sizer_b && sizer_owned_window
+        ? g_host->ui_sizer_add(window_sizer_b, sizer_owned_window, 0, 0, 0) : -1;
+    const int32_t window_sizer_a_attached = sizer_owner_a && window_sizer_a
+        ? g_host->ui_window_set_sizer(sizer_owner_a, window_sizer_a) : -1;
+    const int32_t window_sizer_b_attached = sizer_owner_b && window_sizer_b
+        ? g_host->ui_window_set_sizer(sizer_owner_b, window_sizer_b) : -1;
+    const int32_t window_sizer_same_owner = sizer_owner_a && window_sizer_a
+        ? g_host->ui_window_set_sizer(sizer_owner_a, window_sizer_a) : -1;
+    const int32_t window_sizer_second_owner = sizer_owner_b && window_sizer_a
+        ? g_host->ui_window_set_sizer(sizer_owner_b, window_sizer_a) : 0;
+    const int32_t foreign_window_membership = window_sizer_a && sizer_foreign_window
+        ? g_host->ui_sizer_add(window_sizer_a, sizer_foreign_window, 0, 0, 0) : -1;
+
+    const uint64_t nested_sizer_a = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const uint64_t nested_sizer_b = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const uint64_t nested_child_sizer = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const int32_t nested_first_parent = nested_sizer_a && nested_child_sizer
+        ? g_host->ui_sizer_add(nested_sizer_a, nested_child_sizer, 1, wxEXPAND, 0) : -1;
+    const int32_t nested_second_parent = nested_sizer_b && nested_child_sizer
+        ? g_host->ui_sizer_add(nested_sizer_b, nested_child_sizer, 1, wxEXPAND, 0) : -1;
+    const int32_t nested_direct_window_root = sizer_owner_c && nested_child_sizer
+        ? g_host->ui_window_set_sizer(sizer_owner_c, nested_child_sizer) : -1;
+    const int32_t nested_root_a_attached = sizer_owner_c && nested_sizer_a
+        ? g_host->ui_window_set_sizer(sizer_owner_c, nested_sizer_a) : -1;
+    const int32_t nested_root_b_attached = sizer_owner_d && nested_sizer_b
+        ? g_host->ui_window_set_sizer(sizer_owner_d, nested_sizer_b) : -1;
+
+    const uint64_t foreign_window_root = g_host->ui_sizer_create(
+        KUA_UI_SIZER_BOX, wxVERTICAL, 0, 0, 0, 0);
+    const int32_t foreign_window_root_add = foreign_window_root && sizer_foreign_window
+        ? g_host->ui_sizer_add(foreign_window_root, sizer_foreign_window, 0, 0, 0) : -1;
+    const int32_t foreign_window_wrong_root = sizer_owner_a && foreign_window_root
+        ? g_host->ui_window_set_sizer(sizer_owner_a, foreign_window_root) : -1;
+    const int32_t foreign_window_right_root = sizer_owner_b && foreign_window_root
+        ? g_host->ui_window_set_sizer(sizer_owner_b, foreign_window_root) : -1;
+
+    sizer_ownership_ok = first_window_membership > 0 &&
+                         duplicate_window_membership == -1 &&
+                         window_sizer_a_attached > 0 && window_sizer_b_attached > 0 &&
+                         window_sizer_same_owner > 0 && window_sizer_second_owner == -1 &&
+                         foreign_window_membership == -1 &&
+                         nested_first_parent > 0 && nested_second_parent == -1 &&
+                         nested_direct_window_root == -1 &&
+                         nested_root_a_attached > 0 && nested_root_b_attached > 0 &&
+                         foreign_window_root_add > 0 && foreign_window_wrong_root == -1 &&
+                         foreign_window_right_root > 0;
 #endif
 
     const uint64_t manager = frame_window ? g_host->ui_aui_get_manager(frame_window) : 0;
@@ -483,7 +554,7 @@ void on_window(const KUA_EditorContext* context)
 
     char ui_details[768]{};
     std::snprintf(ui_details, sizeof(ui_details),
-                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|class=%d|text=%d|checkbox=%d|choice=%d|type_reject=%d|window_ops=%d|sizer_replace=%d|sizer_destroy=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
+                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|class=%d|text=%d|checkbox=%d|choice=%d|type_reject=%d|window_ops=%d|sizer_replace=%d|sizer_destroy=%d|sizer_ownership=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
                   frame_window != 0, top_level_initial, dialog != 0, dialog_shown, dialog_hidden,
                   dialog_enumerated, dialog_destroyed, stale_dialog_handle, destroy_probe != 0,
                   destroy_probe_result, stale_destroy_probe, g_destroy_event_handle_valid,
@@ -491,7 +562,7 @@ void on_window(const KUA_EditorContext* context)
                   g_window_shown_events, g_window_hidden_events, g_window_destroying_events,
                   panel != 0, panel_destroyed, page_added, page_count, class_read,
                    text_control_ok, checkbox_ok, choice_ok, control_type_rejection_ok, window_ops_ok,
-                  sizer_replacement_ok, sizer_owner_destroyed_ok, manager != 0, aui_owner_lifetime_ok, pane_added,
+                  sizer_replacement_ok, sizer_owner_destroyed_ok, sizer_ownership_ok, manager != 0, aui_owner_lifetime_ok, pane_added,
                   aui_updated, pane_detached, menu_attached, menu_binding != 0, menu_dispatch_ok,
                   menu_callback_count, menu_unbound, property_result);
     const bool ui_ok = frame_window && top_level_initial > 0 && window_observer &&
@@ -504,7 +575,7 @@ void on_window(const KUA_EditorContext* context)
                        page_count == 1 && class_read > 0 &&
                        std::string(class_name).find("wxNotebook") != std::string::npos &&
                        text_control_ok && checkbox_ok && choice_ok && control_type_rejection_ok && window_ops_ok &&
-                       sizer_replacement_ok && sizer_owner_destroyed_ok &&
+                       sizer_replacement_ok && sizer_owner_destroyed_ok && sizer_ownership_ok &&
                        aui_owner_lifetime_ok && pane_added > 0 && aui_updated > 0 && pane_detached > 0 &&
                        menu_attached > 0 && menu_binding != 0 && menu_dispatch_ok &&
                        menu_unbound > 0 && (!property_grid || property_result > 0);
