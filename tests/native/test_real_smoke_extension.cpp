@@ -480,6 +480,112 @@ void on_window(const KUA_EditorContext* context)
     const int32_t menu_attached = menu_item > 0
         ? g_host->ui_menu_bar_append(menu_bar, menu, "KUA Smoke")
         : -1;
+    const int32_t menu_bar_count_before = menu_bar
+        ? g_host->ui_menu_bar_get_menu_count(menu_bar) : -1;
+    const int32_t menu_bar_count_after_append = menu_attached > 0
+        ? g_host->ui_menu_bar_get_menu_count(menu_bar) : -1;
+    const uint64_t attached_menu = menu_bar_count_after_append > 0
+        ? g_host->ui_menu_bar_get_menu(menu_bar,
+              static_cast<uint32_t>(menu_bar_count_after_append - 1)) : 0;
+    const int32_t attached_menu_item_count = attached_menu
+        ? g_host->ui_menu_get_item_count(attached_menu) : -1;
+    char menu_bar_label[96]{};
+    const int32_t menu_bar_label_read = menu_bar_count_after_append > 0
+        ? g_host->ui_menu_bar_get_label(menu_bar,
+              static_cast<uint32_t>(menu_bar_count_after_append - 1),
+              menu_bar_label, sizeof(menu_bar_label)) : -1;
+    const int32_t menu_bar_label_set = menu_bar_count_after_append > 0
+        ? g_host->ui_menu_bar_set_label(menu_bar,
+              static_cast<uint32_t>(menu_bar_count_after_append - 1), "KUA Smoke Renamed") : -1;
+    char renamed_menu_bar_label[96]{};
+    const int32_t renamed_menu_bar_label_read = menu_bar_count_after_append > 0
+        ? g_host->ui_menu_bar_get_label(menu_bar,
+              static_cast<uint32_t>(menu_bar_count_after_append - 1),
+              renamed_menu_bar_label, sizeof(renamed_menu_bar_label)) : -1;
+    const int32_t menu_bar_label_restore = menu_bar_count_after_append > 0
+        ? g_host->ui_menu_bar_set_label(menu_bar,
+              static_cast<uint32_t>(menu_bar_count_after_append - 1), "KUA Smoke") : -1;
+
+    constexpr int32_t smoke_toggle_id = 61001;
+    constexpr int32_t smoke_radio_id = 61002;
+    const int32_t menu_radio_insert = menu
+        ? g_host->ui_menu_insert(menu, 0, smoke_radio_id, "KUA radio", "",
+                                 KUA_UI_MENU_RADIO) : -1;
+    const int32_t menu_toggle_append = menu
+        ? g_host->ui_menu_append(menu, smoke_toggle_id, "KUA toggle", "",
+                                 KUA_UI_MENU_CHECK) : -1;
+    const int32_t menu_separator_append = menu
+        ? g_host->ui_menu_append_separator(menu) : -1;
+    const int32_t menu_separator_insert = menu
+        ? g_host->ui_menu_insert_separator(menu, 2) : -1;
+    const int32_t menu_item_count_built = menu
+        ? g_host->ui_menu_get_item_count(menu) : -1;
+    const int32_t menu_toggle_disable = menu
+        ? g_host->ui_menu_enable(menu, smoke_toggle_id, 0) : -1;
+    const int32_t menu_toggle_disabled = menu
+        ? g_host->ui_menu_is_enabled(menu, smoke_toggle_id) : -1;
+    const int32_t menu_toggle_enable = menu
+        ? g_host->ui_menu_enable(menu, smoke_toggle_id, 1) : -1;
+    const int32_t menu_toggle_enabled = menu
+        ? g_host->ui_menu_is_enabled(menu, smoke_toggle_id) : -1;
+    const int32_t menu_toggle_check = menu
+        ? g_host->ui_menu_check(menu, smoke_toggle_id, 1) : -1;
+    const int32_t menu_toggle_checked = menu
+        ? g_host->ui_menu_is_checked(menu, smoke_toggle_id) : -1;
+    const int32_t menu_toggle_uncheck = menu
+        ? g_host->ui_menu_check(menu, smoke_toggle_id, 0) : -1;
+    const int32_t menu_toggle_unchecked = menu
+        ? g_host->ui_menu_is_checked(menu, smoke_toggle_id) : -1;
+    const int32_t menu_toggle_set_label = menu
+        ? g_host->ui_menu_set_label(menu, smoke_toggle_id, "KUA toggle revised") : -1;
+    char menu_toggle_label[96]{};
+    const int32_t menu_toggle_get_label = menu
+        ? g_host->ui_menu_get_label(menu, smoke_toggle_id,
+                                    menu_toggle_label, sizeof(menu_toggle_label)) : -1;
+    const int32_t menu_toggle_delete = menu
+        ? g_host->ui_menu_delete(menu, smoke_toggle_id) : -1;
+    const int32_t menu_item_count_after_delete = menu
+        ? g_host->ui_menu_get_item_count(menu) : -1;
+
+    const uint64_t inserted_bar_menu = menu_bar ? g_host->ui_menu_create(frame_window) : 0;
+    const int32_t menu_bar_insert = inserted_bar_menu
+        ? g_host->ui_menu_bar_insert(menu_bar, 0, inserted_bar_menu, "KUA First") : -1;
+    const int32_t menu_bar_count_after_insert = menu_bar_insert > 0
+        ? g_host->ui_menu_bar_get_menu_count(menu_bar) : -1;
+    const uint64_t first_bar_menu = menu_bar_count_after_insert > 0
+        ? g_host->ui_menu_bar_get_menu(menu_bar, 0) : 0;
+    const int32_t first_bar_menu_item_count = first_bar_menu
+        ? g_host->ui_menu_get_item_count(first_bar_menu) : -1;
+    const int32_t first_bar_menu_label_set = menu_bar_insert > 0
+        ? g_host->ui_menu_bar_set_label(menu_bar, 0, "KUA First Renamed") : -1;
+    char first_bar_menu_label[96]{};
+    const int32_t first_bar_menu_label_get = menu_bar_insert > 0
+        ? g_host->ui_menu_bar_get_label(menu_bar, 0,
+                                        first_bar_menu_label, sizeof(first_bar_menu_label)) : -1;
+
+    const int menu_ops_ok =
+        menu_bar_count_before >= 0 && menu_item > 0 && menu_attached > 0 &&
+        menu_bar_count_after_append == menu_bar_count_before + 1 &&
+        attached_menu && attached_menu_item_count == 1 &&
+        menu_bar_label_read > 0 && std::strcmp(menu_bar_label, "KUA Smoke") == 0 &&
+        menu_bar_label_set > 0 && renamed_menu_bar_label_read > 0 &&
+        std::strcmp(renamed_menu_bar_label, "KUA Smoke Renamed") == 0 &&
+        menu_bar_label_restore > 0 &&
+        menu_radio_insert > 0 && menu_toggle_append > 0 &&
+        menu_separator_append > 0 && menu_separator_insert > 0 &&
+        menu_item_count_built == 5 &&
+        menu_toggle_disable > 0 && menu_toggle_disabled == 0 &&
+        menu_toggle_enable > 0 && menu_toggle_enabled == 1 &&
+        menu_toggle_check > 0 && menu_toggle_checked == 1 &&
+        menu_toggle_uncheck > 0 && menu_toggle_unchecked == 0 &&
+        menu_toggle_set_label > 0 && menu_toggle_get_label > 0 &&
+        std::strcmp(menu_toggle_label, "KUA toggle revised") == 0 &&
+        menu_toggle_delete > 0 && menu_item_count_after_delete == 4 &&
+        menu_bar_insert > 0 && menu_bar_count_after_insert == menu_bar_count_after_append + 1 &&
+        first_bar_menu && first_bar_menu_item_count == 0 &&
+        first_bar_menu_label_set > 0 && first_bar_menu_label_get > 0 &&
+        std::strcmp(first_bar_menu_label, "KUA First Renamed") == 0;
+
     int menu_callback_count = 0;
     const uint64_t menu_binding = menu_attached > 0
         ? g_host->ui_menu_bind(frame_window, smoke_menu_id, &on_menu_command,
@@ -545,9 +651,9 @@ void on_window(const KUA_EditorContext* context)
                                late_sizer_stale == -1;
 #endif
 
-    char ui_details[768]{};
+    char ui_details[1024]{};
     std::snprintf(ui_details, sizeof(ui_details),
-                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|class=%d|controls=%d|text=%d|checkbox=%d|choice=%d|window_ops=%d|sizer_replace=%d|sizer_destroy=%d|sizer_ownership=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
+                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|class=%d|controls=%d|text=%d|checkbox=%d|choice=%d|window_ops=%d|sizer_replace=%d|sizer_destroy=%d|sizer_ownership=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|menu_ops=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
                   frame_window != 0, top_level_initial, dialog != 0, dialog_shown, dialog_hidden,
                   dialog_enumerated, dialog_destroyed, stale_dialog_handle, destroy_probe != 0,
                   destroy_probe_result, stale_destroy_probe, g_destroy_event_handle_valid,
@@ -557,7 +663,7 @@ void on_window(const KUA_EditorContext* context)
                   native_controls_ok, text_control_ok, check_box_ok, choice_control_ok,
                   common_window_ops_ok, sizer_replacement_ok, sizer_owner_destroyed_ok,
                   sizer_ownership_ok, manager != 0, aui_owner_lifetime_ok, pane_added,
-                  aui_updated, pane_detached, menu_attached, menu_binding != 0, menu_dispatch_ok,
+                  aui_updated, pane_detached, menu_attached, menu_ops_ok, menu_binding != 0, menu_dispatch_ok,
                   menu_callback_count, menu_unbound, property_result);
     const bool ui_ok = frame_window && top_level_initial > 0 && window_observer &&
                        dialog && dialog_shown > 0 && dialog_hidden > 0 && dialog_enumerated &&
@@ -571,7 +677,7 @@ void on_window(const KUA_EditorContext* context)
                        native_controls_ok &&
                        sizer_replacement_ok && sizer_owner_destroyed_ok && sizer_ownership_ok &&
                        aui_owner_lifetime_ok && pane_added > 0 && aui_updated > 0 && pane_detached > 0 &&
-                       menu_attached > 0 && menu_binding != 0 && menu_dispatch_ok &&
+                       menu_attached > 0 && menu_ops_ok && menu_binding != 0 && menu_dispatch_ok &&
                        menu_unbound > 0 && (!property_grid || property_result > 0);
     record(ui_ok ? "native-ui-ready" : "native-ui-failed",
            context->editor_kind, ui_details);
