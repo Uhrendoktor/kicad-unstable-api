@@ -1630,7 +1630,12 @@ int32_t ui_aui_insert_pane(uint64_t manager_handle, uint64_t window_handle,
     const wxAuiPaneInfo& insert_location = manager->GetPane(location);
     if (!insert_location.IsOk())
         return -1;
-    return manager->InsertPane(window, insert_location, native_insert_level) ? 1 : 0;
+
+    // InsertPane adjusts the manager's internal pane array and may reallocate it.
+    // Pass a value copy rather than a reference into that array: wxAuiManager
+    // reads the location again after shifting panes.
+    const wxAuiPaneInfo insert_location_snapshot = insert_location;
+    return manager->InsertPane(window, insert_location_snapshot, native_insert_level) ? 1 : 0;
 }
 
 int32_t ui_aui_pane_show(uint64_t manager_handle, uint64_t window_handle, int32_t shown)
