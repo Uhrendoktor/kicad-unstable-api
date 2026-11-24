@@ -1142,10 +1142,13 @@ int32_t ui_menu_bar_append(uint64_t menu_bar_handle, uint64_t menu_handle, const
         return -1;
     UiHandleEntry* bar = find_ui_handle(menu_bar_handle, UiHandleKind::MenuBar);
     UiHandleEntry* menu = find_ui_handle(menu_handle, UiHandleKind::Menu);
-    if (!bar || !menu)
+    if (!bar || !menu || bar->frame != menu->frame)
+        return -1;
+    auto* native_menu = static_cast<wxMenu*>(menu->pointer);
+    if (native_menu->IsAttached())
         return -1;
     const bool ok = static_cast<wxMenuBar*>(bar->pointer)->Append(
-        static_cast<wxMenu*>(menu->pointer), wxString::FromUTF8(title));
+        native_menu, wxString::FromUTF8(title));
     return ok ? 1 : 0;
 }
 
@@ -1158,6 +1161,217 @@ int32_t ui_menu_bar_remove(uint64_t menu_bar_handle, uint32_t index)
         return -1;
     wxMenu* menu = static_cast<wxMenuBar*>(bar->pointer)->Remove(index);
     return menu ? 1 : 0;
+}
+
+int32_t ui_menu_bar_get_menu_count(uint64_t menu_bar_handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_bar_handle, UiHandleKind::MenuBar);
+    if (!entry)
+        return -1;
+    const size_t count = static_cast<wxMenuBar*>(entry->pointer)->GetMenuCount();
+    return count > static_cast<size_t>(std::numeric_limits<int32_t>::max())
+        ? -1 : static_cast<int32_t>(count);
+}
+
+uint64_t ui_menu_bar_get_menu(uint64_t menu_bar_handle, uint32_t index)
+{
+    if (!on_gui_thread())
+        return 0;
+    UiHandleEntry* entry = find_ui_handle(menu_bar_handle, UiHandleKind::MenuBar);
+    if (!entry)
+        return 0;
+    auto* bar = static_cast<wxMenuBar*>(entry->pointer);
+    if (index >= bar->GetMenuCount())
+        return 0;
+    wxMenu* menu = bar->GetMenu(index);
+    void* frame = entry->frame;
+    wxWindow* owner_window = entry->owner_window;
+    return menu ? register_ui_handle(menu, UiHandleKind::Menu, frame, owner_window) : 0;
+}
+
+int32_t ui_menu_bar_insert(uint64_t menu_bar_handle, uint32_t index,
+                           uint64_t menu_handle, const char* title)
+{
+    if (!on_gui_thread() || !title)
+        return -1;
+    UiHandleEntry* bar_entry = find_ui_handle(menu_bar_handle, UiHandleKind::MenuBar);
+    UiHandleEntry* menu_entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!bar_entry || !menu_entry || bar_entry->frame != menu_entry->frame)
+        return -1;
+    auto* bar = static_cast<wxMenuBar*>(bar_entry->pointer);
+    auto* native_menu = static_cast<wxMenu*>(menu_entry->pointer);
+    if (index > bar->GetMenuCount() || native_menu->IsAttached())
+        return -1;
+    return bar->Insert(index, native_menu, wxString::FromUTF8(title)) ? 1 : 0;
+}
+
+int32_t ui_menu_bar_set_label(uint64_t menu_bar_handle, uint32_t index, const char* title)
+{
+    if (!on_gui_thread() || !title)
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_bar_handle, UiHandleKind::MenuBar);
+    if (!entry)
+        return -1;
+    auto* bar = static_cast<wxMenuBar*>(entry->pointer);
+    if (index >= bar->GetMenuCount())
+        return -1;
+    bar->SetMenuLabel(index, wxString::FromUTF8(title));
+    return 1;
+}
+
+int32_t ui_menu_bar_get_label(uint64_t menu_bar_handle, uint32_t index,
+                              char* buffer, uint32_t capacity)
+{
+    if (!on_gui_thread() || !buffer || capacity == 0)
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_bar_handle, UiHandleKind::MenuBar);
+    if (!entry)
+        return -1;
+    auto* bar = static_cast<wxMenuBar*>(entry->pointer);
+    if (index >= bar->GetMenuCount())
+        return -1;
+    copy_utf8_to_buffer(bar->GetMenuLabel(index), buffer, capacity);
+    return 1;
+}
+
+int32_t ui_menu_get_item_count(uint64_t menu_handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!entry)
+        return -1;
+    const size_t count = static_cast<wxMenu*>(entry->pointer)->GetMenuItemCount();
+    return count > static_cast<size_t>(std::numeric_limits<int32_t>::max())
+        ? -1 : static_cast<int32_t>(count);
+}
+
+int32_t ui_menu_insert(uint64_t menu_handle, uint32_t index, int32_t id,
+                       const char* label, const char* help, uint32_t kind)
+{
+    if (!on_gui_thread() || !label)
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!entry)
+        return -1;
+    auto* menu = static_cast<wxMenu*>(entry->pointer);
+    if (index > menu->GetMenuItemCount())
+        return -1;
+    wxItemKind item_kind = wxITEM_NORMAL;
+    if (kind == KUA_UI_MENU_CHECK)
+        item_kind = wxITEM_CHECK;
+    else if (kind == KUA_UI_MENU_RADIO)
+        item_kind = wxITEM_RADIO;
+    else if (kind != KUA_UI_MENU_NORMAL)
+        return -1;
+    return menu->Insert(index, id, wxString::FromUTF8(label),
+                        wxString::FromUTF8(help ? help : ""), item_kind) ? 1 : 0;
+}
+
+int32_t ui_menu_append_separator(uint64_t menu_handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!entry)
+        return -1;
+    return static_cast<wxMenu*>(entry->pointer)->AppendSeparator() ? 1 : 0;
+}
+
+int32_t ui_menu_insert_separator(uint64_t menu_handle, uint32_t index)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!entry)
+        return -1;
+    auto* menu = static_cast<wxMenu*>(entry->pointer);
+    if (index > menu->GetMenuItemCount())
+        return -1;
+    return menu->InsertSeparator(index) ? 1 : 0;
+}
+
+int32_t ui_menu_enable(uint64_t menu_handle, int32_t id, int32_t enabled)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!entry)
+        return -1;
+    auto* menu = static_cast<wxMenu*>(entry->pointer);
+    if (!menu->FindItem(id))
+        return -1;
+    menu->Enable(id, enabled != 0);
+    return 1;
+}
+
+int32_t ui_menu_check(uint64_t menu_handle, int32_t id, int32_t checked)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!entry)
+        return -1;
+    auto* menu = static_cast<wxMenu*>(entry->pointer);
+    wxMenuItem* item = menu->FindItem(id);
+    if (!item || !item->IsCheckable())
+        return -1;
+    menu->Check(id, checked != 0);
+    return menu->IsChecked(id) == (checked != 0) ? 1 : 0;
+}
+
+int32_t ui_menu_is_enabled(uint64_t menu_handle, int32_t id)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!entry)
+        return -1;
+    auto* menu = static_cast<wxMenu*>(entry->pointer);
+    return menu->FindItem(id) ? (menu->IsEnabled(id) ? 1 : 0) : -1;
+}
+
+int32_t ui_menu_is_checked(uint64_t menu_handle, int32_t id)
+{
+    if (!on_gui_thread())
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!entry)
+        return -1;
+    auto* menu = static_cast<wxMenu*>(entry->pointer);
+    wxMenuItem* item = menu->FindItem(id);
+    return item && item->IsCheckable() ? (menu->IsChecked(id) ? 1 : 0) : -1;
+}
+
+int32_t ui_menu_set_label(uint64_t menu_handle, int32_t id, const char* label)
+{
+    if (!on_gui_thread() || !label)
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!entry)
+        return -1;
+    auto* menu = static_cast<wxMenu*>(entry->pointer);
+    if (!menu->FindItem(id))
+        return -1;
+    menu->SetLabel(id, wxString::FromUTF8(label));
+    return 1;
+}
+
+int32_t ui_menu_get_label(uint64_t menu_handle, int32_t id,
+                          char* buffer, uint32_t capacity)
+{
+    if (!on_gui_thread() || !buffer || capacity == 0)
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(menu_handle, UiHandleKind::Menu);
+    if (!entry)
+        return -1;
+    auto* menu = static_cast<wxMenu*>(entry->pointer);
+    if (!menu->FindItem(id))
+        return -1;
+    copy_utf8_to_buffer(menu->GetLabel(id), buffer, capacity);
+    return 1;
 }
 
 uint64_t ui_menu_bind(uint64_t frame_handle, int32_t id, KUA_GuiCallback callback, void* user_data)
@@ -1585,6 +1799,21 @@ int32_t ui_menu_append(uint64_t, int32_t, const char*, const char*, uint32_t) { 
 int32_t ui_menu_delete(uint64_t, int32_t) { return -1; }
 int32_t ui_menu_bar_append(uint64_t, uint64_t, const char*) { return -1; }
 int32_t ui_menu_bar_remove(uint64_t, uint32_t) { return -1; }
+int32_t ui_menu_bar_get_menu_count(uint64_t) { return -1; }
+uint64_t ui_menu_bar_get_menu(uint64_t, uint32_t) { return 0; }
+int32_t ui_menu_bar_insert(uint64_t, uint32_t, uint64_t, const char*) { return -1; }
+int32_t ui_menu_bar_set_label(uint64_t, uint32_t, const char*) { return -1; }
+int32_t ui_menu_bar_get_label(uint64_t, uint32_t, char*, uint32_t) { return -1; }
+int32_t ui_menu_get_item_count(uint64_t) { return -1; }
+int32_t ui_menu_insert(uint64_t, uint32_t, int32_t, const char*, const char*, uint32_t) { return -1; }
+int32_t ui_menu_append_separator(uint64_t) { return -1; }
+int32_t ui_menu_insert_separator(uint64_t, uint32_t) { return -1; }
+int32_t ui_menu_enable(uint64_t, int32_t, int32_t) { return -1; }
+int32_t ui_menu_check(uint64_t, int32_t, int32_t) { return -1; }
+int32_t ui_menu_is_enabled(uint64_t, int32_t) { return -1; }
+int32_t ui_menu_is_checked(uint64_t, int32_t) { return -1; }
+int32_t ui_menu_set_label(uint64_t, int32_t, const char*) { return -1; }
+int32_t ui_menu_get_label(uint64_t, int32_t, char*, uint32_t) { return -1; }
 uint64_t ui_menu_bind(uint64_t, int32_t, KUA_GuiCallback, void*) { return 0; }
 int32_t ui_menu_unbind(uint64_t) { return -1; }
 uint64_t ui_aui_get_manager(uint64_t) { return 0; }
@@ -1771,6 +2000,21 @@ KUA_HostApi make_host_api()
     host.ui_menu_delete = &ui_menu_delete;
     host.ui_menu_bar_append = &ui_menu_bar_append;
     host.ui_menu_bar_remove = &ui_menu_bar_remove;
+    host.ui_menu_bar_get_menu_count = &ui_menu_bar_get_menu_count;
+    host.ui_menu_bar_get_menu = &ui_menu_bar_get_menu;
+    host.ui_menu_bar_insert = &ui_menu_bar_insert;
+    host.ui_menu_bar_set_label = &ui_menu_bar_set_label;
+    host.ui_menu_bar_get_label = &ui_menu_bar_get_label;
+    host.ui_menu_get_item_count = &ui_menu_get_item_count;
+    host.ui_menu_insert = &ui_menu_insert;
+    host.ui_menu_append_separator = &ui_menu_append_separator;
+    host.ui_menu_insert_separator = &ui_menu_insert_separator;
+    host.ui_menu_enable = &ui_menu_enable;
+    host.ui_menu_check = &ui_menu_check;
+    host.ui_menu_is_enabled = &ui_menu_is_enabled;
+    host.ui_menu_is_checked = &ui_menu_is_checked;
+    host.ui_menu_set_label = &ui_menu_set_label;
+    host.ui_menu_get_label = &ui_menu_get_label;
     host.ui_menu_bind = &ui_menu_bind;
     host.ui_menu_unbind = &ui_menu_unbind;
     host.ui_aui_get_manager = &ui_aui_get_manager;

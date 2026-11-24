@@ -232,6 +232,28 @@ typedef struct KUA_HostApi
     int32_t (*ui_window_get_size)(uint64_t window, int32_t* width, int32_t* height);
     int32_t (*ui_window_set_position)(uint64_t window, int32_t x, int32_t y);
     int32_t (*ui_window_get_position)(uint64_t window, int32_t* x, int32_t* y);
+
+    /* Native wxMenuBar and wxMenu composition/state operations. */
+    int32_t (*ui_menu_bar_get_menu_count)(uint64_t menu_bar);
+    uint64_t (*ui_menu_bar_get_menu)(uint64_t menu_bar, uint32_t index);
+    int32_t (*ui_menu_bar_insert)(uint64_t menu_bar, uint32_t index,
+                                  uint64_t menu, const char* title);
+    int32_t (*ui_menu_bar_set_label)(uint64_t menu_bar, uint32_t index,
+                                     const char* title);
+    int32_t (*ui_menu_bar_get_label)(uint64_t menu_bar, uint32_t index,
+                                     char* buffer, uint32_t capacity);
+    int32_t (*ui_menu_get_item_count)(uint64_t menu);
+    int32_t (*ui_menu_insert)(uint64_t menu, uint32_t index, int32_t id,
+                              const char* label, const char* help, uint32_t kind);
+    int32_t (*ui_menu_append_separator)(uint64_t menu);
+    int32_t (*ui_menu_insert_separator)(uint64_t menu, uint32_t index);
+    int32_t (*ui_menu_enable)(uint64_t menu, int32_t id, int32_t enabled);
+    int32_t (*ui_menu_check)(uint64_t menu, int32_t id, int32_t checked);
+    int32_t (*ui_menu_is_enabled)(uint64_t menu, int32_t id);
+    int32_t (*ui_menu_is_checked)(uint64_t menu, int32_t id);
+    int32_t (*ui_menu_set_label)(uint64_t menu, int32_t id, const char* label);
+    int32_t (*ui_menu_get_label)(uint64_t menu, int32_t id,
+                                 char* buffer, uint32_t capacity);
 } KUA_HostApi;
 
 typedef struct KUA_ExtensionApi
