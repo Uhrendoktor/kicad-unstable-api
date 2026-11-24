@@ -86,7 +86,7 @@ jobs:
             libocct-foundation-dev libocct-ocaf-dev unixodbc-dev zlib1g-dev \
             shared-mime-info libgit2-dev libsecret-1-dev libnng-dev \
             libprotobuf-dev protobuf-compiler swig python3-pip python3-venv \
-            libzstd-dev libspnav-dev libpoppler-glib-dev libsqlite3-dev xvfb xauth strace
+            libzstd-dev libspnav-dev libpoppler-glib-dev libsqlite3-dev xvfb xauth strace gdb
 
       - name: Fetch and install exact pinned KiCad nightly binary package
         run: |
@@ -188,6 +188,7 @@ jobs:
       - name: Run real Eeschema and PCB Editor GAL smoke with graceful KIFACE shutdown
         env:
           KUA_SMOKE_LD_DEBUG: "1"
+          KUA_SMOKE_GDB: "1"
         run: |
           xvfb-run -a -s "-screen 0 1920x1080x24" python3 tools/smoke_real_kicad.py \
             --eeschema-install-dir "$KUA_EESCHEMA_INSTALL_DIR" \
