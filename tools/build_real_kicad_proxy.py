@@ -259,9 +259,8 @@ def main() -> int:
                     + ", ".join(missing_gal)
                 )
             print(
-                f"PASS: {output} exports KIFACE_1, links libkigal, and resolves "
-                "all "
-                f"direct GAL references (KiCad {head})."
+                f"PASS: {output} exports KIFACE_1, links libkigal, resolves direct GAL references, "
+                f"and has no known hidden KiCad RTTI imports (KiCad {head})."
             )
 
     except (OSError, subprocess.CalledProcessError, ValueError, KeyError, json.JSONDecodeError) as error:
