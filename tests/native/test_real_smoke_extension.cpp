@@ -9,6 +9,7 @@
 #if defined(KUA_SMOKE_WITH_WX)
 #include <wx/app.h>
 #include <wx/event.h>
+#include <wx/dialog.h>
 #include <wx/notebook.h>
 #include <wx/frame.h>
 #include <wx/menu.h>
@@ -91,6 +92,130 @@ void record(const char* event, uint32_t editor_kind, const char* details = "")
         std::fclose(file);
     }
 }
+
+#if defined(KUA_SMOKE_WITH_WX)
+void graceful_close_top_level_windows(uint32_t editor_kind,
+                                      wxWeakRef<wxWindow> weak_frame,
+                                      bool modal_loop_was_ended = false)
+{
+    if (!wxTheApp)
+        return;
+
+    if (modal_loop_was_ended)
+        record("graceful-modal-dialog-loop-unwound", editor_kind);
+
+    // KiCad's setup wizard runs a nested modal loop. Close(true) dispatches
+    // wxEVT_WIZARD_CANCEL, whose KiCad handler opens a confirmation dialog.
+    // End the modal dialog directly, then continue after RunWizard() unwinds.
+    for (wxWindowList::compatibility_iterator node = wxTopLevelWindows.GetFirst();
+         node; node = node->GetNext())
+    {
+        wxWindow* window = node->GetData();
+        auto* dialog = dynamic_cast<wxDialog*>(window);
+        if (!dialog || !dialog->IsModal())
+            continue;
+
+        const wxClassInfo* info = window->GetClassInfo();
+        wxString class_name("unknown");
+        if (info)
+            class_name = info->GetClassName();
+        const auto class_utf8 = class_name.utf8_str();
+        char details[160]{};
+        std::snprintf(details, sizeof(details), "class=%s",
+                      class_utf8.data() ? class_utf8.data() : "unknown");
+        record("graceful-modal-dialog-end-begin", editor_kind, details);
+        dialog->EndModal(wxID_CANCEL);
+        record("graceful-modal-dialog-end-requested", editor_kind, details);
+        wxTheApp->CallAfter([editor_kind, weak_frame]() mutable {
+            graceful_close_top_level_windows(editor_kind, weak_frame, true);
+        });
+        return;
+    }
+
+    // Process the deferred wizard Destroy() that KiCad issues immediately
+    // after RunWizard() returns, before enumerating the remaining frames.
+    wxYieldIfNeeded();
+    std::vector<wxWeakRef<wxWindow>> top_level_windows;
+    for (wxWindowList::compatibility_iterator node = wxTopLevelWindows.GetFirst();
+         node; node = node->GetNext())
+    {
+        if (wxWindow* window = node->GetData())
+            top_level_windows.emplace_back(window);
+    }
+
+    int32_t close_requested = 0;
+    int32_t close_failed = 0;
+    // Close modal/auxiliary windows before the active editor frame.
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (size_t index = 0; index < top_level_windows.size(); ++index)
+        {
+            wxWeakRef<wxWindow>& weak_window = top_level_windows[index];
+            wxWindow* window = weak_window.get();
+            if (!window || window->IsBeingDeleted())
+                continue;
+
+            const bool is_editor_frame = window == weak_frame.get();
+            if ((pass == 0 && is_editor_frame) || (pass == 1 && !is_editor_frame))
+                continue;
+
+            const wxClassInfo* class_info = window->GetClassInfo();
+            wxWindow* parent = window->GetParent();
+            const wxClassInfo* parent_info = parent ? parent->GetClassInfo() : nullptr;
+            wxString class_name("unknown");
+            if (class_info)
+                class_name = class_info->GetClassName();
+            wxString parent_class("none");
+            if (parent_info)
+                parent_class = parent_info->GetClassName();
+            const auto class_utf8 = class_name.utf8_str();
+            const auto parent_utf8 = parent_class.utf8_str();
+            char details[256]{};
+            std::snprintf(details, sizeof(details),
+                          "index=%zu|class=%s|parent=%s|shown=%d|editor_frame=%d",
+                          index,
+                          class_utf8.data() ? class_utf8.data() : "unknown",
+                          parent_utf8.data() ? parent_utf8.data() : "none",
+                          window->IsShown() ? 1 : 0,
+                          is_editor_frame ? 1 : 0);
+            record("graceful-window-close-begin", editor_kind, details);
+
+            const bool close_ok = window->Close(true);
+            if (close_ok)
+            {
+                ++close_requested;
+                record("graceful-window-close-requested", editor_kind, details);
+            }
+            else
+            {
+                ++close_failed;
+                record("graceful-window-close-failed", editor_kind, details);
+            }
+
+            wxYieldIfNeeded();
+            wxWindow* remaining = weak_window.get();
+            char processed[256]{};
+            std::snprintf(processed, sizeof(processed),
+                          "index=%zu|closed=%d|weak_alive=%d|being_deleted=%d",
+                          index, close_ok ? 1 : 0, remaining ? 1 : 0,
+                          remaining && remaining->IsBeingDeleted() ? 1 : 0);
+            record("graceful-window-close-processed", editor_kind, processed);
+        }
+    }
+
+    char close_details[128]{};
+    std::snprintf(close_details, sizeof(close_details),
+                  "top_level=%zu|close_requested=%d|close_failed=%d",
+                  top_level_windows.size(), close_requested, close_failed);
+    record(close_requested > 0 && close_failed == 0
+               ? "graceful-windows-close-requested"
+               : "graceful-windows-close-failed",
+           editor_kind, close_details);
+    if (wxTheApp)
+        wxTheApp->ExitMainLoop();
+}
+#endif
+
 
 int initialize(const KUA_HostApi* host)
 {
@@ -917,101 +1042,7 @@ void on_window(const KUA_EditorContext* context)
         wxTheApp->CallAfter([editor_kind, weak_frame]() mutable {
             record("graceful-exit-requested", editor_kind);
             wxTheApp->SetExitOnFrameDelete(true);
-
-            // KiCad can have a project-manager top-level window in addition to
-            // the active editor frame. Closing only context->frame leaves the
-            // app alive, so snapshot all current top-level windows as weak refs.
-            std::vector<wxWeakRef<wxWindow>> top_level_windows;
-            for (wxWindowList::compatibility_iterator node = wxTopLevelWindows.GetFirst();
-                 node; node = node->GetNext())
-            {
-                if (wxWindow* window = node->GetData())
-                    top_level_windows.emplace_back(window);
-            }
-
-            int32_t close_requested = 0;
-            int32_t close_failed = 0;
-
-            // Close the active editor frame first so KiCad's own close handlers
-            // can release frame/manager state before the remaining top-level windows.
-            // Direct Destroy() skips wxEVT_CLOSE_WINDOW and can bypass this ordering.
-            for (int pass = 0; pass < 2; ++pass)
-            {
-                for (size_t index = 0; index < top_level_windows.size(); ++index)
-                {
-                    wxWeakRef<wxWindow>& weak_window = top_level_windows[index];
-                    wxWindow* window = weak_window.get();
-                    if (!window || window->IsBeingDeleted())
-                        continue;
-
-                    const bool is_editor_frame = window == weak_frame.get();
-                    if ((pass == 0) != is_editor_frame)
-                        continue;
-
-                    const wxClassInfo* class_info = window->GetClassInfo();
-                    wxWindow* parent = window->GetParent();
-                    const wxClassInfo* parent_info = parent ? parent->GetClassInfo() : nullptr;
-                    wxString class_name("unknown");
-                    if (class_info)
-                        class_name = class_info->GetClassName();
-                    wxString parent_class("none");
-                    if (parent_info)
-                        parent_class = parent_info->GetClassName();
-                    const auto class_utf8 = class_name.utf8_str();
-                    const auto parent_utf8 = parent_class.utf8_str();
-                    char details[256]{};
-                    std::snprintf(details, sizeof(details),
-                                  "index=%zu|class=%s|parent=%s|shown=%d|editor_frame=%d",
-                                  index,
-                                  class_utf8.data() ? class_utf8.data() : "unknown",
-                                  parent_utf8.data() ? parent_utf8.data() : "none",
-                                  window->IsShown() ? 1 : 0,
-                                  is_editor_frame ? 1 : 0);
-                    record("graceful-window-close-begin", editor_kind, details);
-
-                    // Close(true) dispatches wxEVT_CLOSE_WINDOW with veto disabled,
-                    // allowing KiCad's EDA frame close handlers to run.
-                    const bool close_ok = window->Close(true);
-                    if (close_ok)
-                    {
-                        ++close_requested;
-                        record("graceful-window-close-requested", editor_kind, details);
-                    }
-                    else
-                    {
-                        ++close_failed;
-                        record("graceful-window-close-failed", editor_kind, details);
-                    }
-
-                    // Process the close event and any deferred wx destruction before
-                    // touching the next top-level window. Weak refs guard against a
-                    // prior close handler destroying another window as a side effect.
-                    wxYieldIfNeeded();
-                    wxWindow* remaining = weak_window.get();
-                    char processed[256]{};
-                    std::snprintf(processed, sizeof(processed),
-                                  "index=%zu|closed=%d|weak_alive=%d|being_deleted=%d",
-                                  index,
-                                  close_ok ? 1 : 0,
-                                  remaining ? 1 : 0,
-                                  remaining && remaining->IsBeingDeleted() ? 1 : 0);
-                    record("graceful-window-close-processed", editor_kind, processed);
-                }
-            }
-
-            char close_details[128]{};
-            std::snprintf(close_details, sizeof(close_details),
-                          "top_level=%zu|close_requested=%d|close_failed=%d",
-                          top_level_windows.size(), close_requested, close_failed);
-            record(close_requested > 0 && close_failed == 0
-                       ? "graceful-windows-close-requested"
-                       : "graceful-windows-close-failed",
-                   editor_kind, close_details);
-
-            // The final close normally exits when the last top-level frame is
-            // deleted. Explicitly end the main loop as a deterministic fallback.
-            if (wxTheApp)
-                wxTheApp->ExitMainLoop();
+            graceful_close_top_level_windows(editor_kind, weak_frame);
         });
     }
 #endif
