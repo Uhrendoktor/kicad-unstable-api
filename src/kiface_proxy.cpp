@@ -2480,7 +2480,11 @@ public:
 
     void OnKifaceEnd() override
     {
+        if (std::getenv("KUA_SMOKE_LOG"))
+            log_message(1, "Smoke: KIFACE_PROXY::OnKifaceEnd entered.");
         shutdown_extensions();
+        if (std::getenv("KUA_SMOKE_LOG"))
+            log_message(1, "Smoke: KIFACE_PROXY::OnKifaceEnd extension shutdown completed.");
         if (m_original)
             m_original->OnKifaceEnd();
     }
@@ -2725,6 +2729,8 @@ private:
         if (g_extensions_shutdown)
             return;
 
+        if (std::getenv("KUA_SMOKE_LOG"))
+            log_message(1, "Smoke: shutdown_extensions entered.");
 #if !defined(KUA_SYNTHETIC_ABI)
         destroy_all_overlays();
 #endif
@@ -2736,7 +2742,13 @@ private:
         for (auto it = g_extensions.rbegin(); it != g_extensions.rend(); ++it)
         {
             if (it->api && it->api->shutdown)
+            {
+                if (std::getenv("KUA_SMOKE_LOG"))
+                    log_message(1, "Smoke: invoking extension shutdown callback.");
                 it->api->shutdown();
+                if (std::getenv("KUA_SMOKE_LOG"))
+                    log_message(1, "Smoke: extension shutdown callback returned.");
+            }
         }
         // Keep native modules loaded until process exit. KiCad may still retain
         // RTTI/vtable references originating in an extension.
