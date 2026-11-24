@@ -472,6 +472,8 @@ void on_window(const KUA_EditorContext* context)
         : -1;
 
     const uint64_t menu_bar = frame_window ? g_host->ui_menu_bar_get(frame_window) : 0;
+    const int32_t menu_bar_count_before = menu_bar
+        ? g_host->ui_menu_bar_get_menu_count(menu_bar) : -1;
     const uint64_t menu = menu_bar ? g_host->ui_menu_create(frame_window) : 0;
     constexpr int32_t smoke_menu_id = 61000;
     const int32_t menu_item = menu
@@ -480,8 +482,6 @@ void on_window(const KUA_EditorContext* context)
     const int32_t menu_attached = menu_item > 0
         ? g_host->ui_menu_bar_append(menu_bar, menu, "KUA Smoke")
         : -1;
-    const int32_t menu_bar_count_before = menu_bar
-        ? g_host->ui_menu_bar_get_menu_count(menu_bar) : -1;
     const int32_t menu_bar_count_after_append = menu_attached > 0
         ? g_host->ui_menu_bar_get_menu_count(menu_bar) : -1;
     const uint64_t attached_menu = menu_bar_count_after_append > 0
