@@ -2,7 +2,7 @@ name: Native loader prototype
 
 on:
   push:
-    branches: [main, feature/notebook-page-operations]
+    branches: [main]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -21,7 +21,6 @@ concurrency:
 
 jobs:
   native-loader:
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     name: ${{ matrix.os }} KIFACE proxy harness
     timeout-minutes: 5
     strategy:
@@ -48,11 +47,7 @@ jobs:
   # Fetch the exact versioned .deb from KiCad's official pool: Launchpad can
   # prune a package from its apt index while the immutable versioned archive remains.
   real-kicad-linux:
-    if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.full_editor_validation) ||
-      (github.event_name == 'push' &&
-       github.ref == 'refs/heads/feature/notebook-page-operations' &&
-       startsWith(github.event.head_commit.message, '[full-editor-validation]'))
+    if: github.event_name == 'workflow_dispatch' && inputs.full_editor_validation
     name: Exact-source KiCad nightly runtime and live-editor smoke
     runs-on: ubuntu-24.04
     container: ubuntu:26.04
@@ -151,19 +146,19 @@ jobs:
 
       - name: Compile both production KIFACE proxies against pinned headers and packaged GAL
         run: |
-          start=$SECONDS
+          start="$(date +%s)"
           python3 tools/build_real_kicad_proxy.py \
             --kicad-source .cache/kicad-source \
             --kicad-build .cache/kicad-build \
             --output-dir build/real-kicad
-          echo "Production proxy compilation seconds: $((SECONDS - start))"
+          echo "Production proxy compilation seconds: $(($(date +%s) - start))"
 
       - name: Build live-editor GAL smoke extension
         run: |
-          start=$SECONDS
+          start="$(date +%s)"
           cmake -S . -B build/smoke-extension -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DKUA_SMOKE_WITH_WX=ON
           cmake --build build/smoke-extension --target kua_real_smoke_extension --parallel
-          echo "Smoke extension compilation seconds: $((SECONDS - start))"
+          echo "Smoke extension compilation seconds: $(($(date +%s) - start))"
 
       - name: Run real Eeschema and PCB Editor GAL smoke test
         env:
