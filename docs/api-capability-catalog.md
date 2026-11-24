@@ -72,8 +72,7 @@ Each KUA call should map to an existing native method/event or a mechanical sequ
 | `ui_window_enable/raise/set_focus` | Direct native window enable, raise and focus calls | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
 | `ui_window_set/get_size/position` | Read/write native window geometry | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
 | AUI manager owner tracking | Invalidate manager handles with `wxAuiManager::GetManagedWindow()` | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
-| AUI pane lookup/insert/visibility/perspective | Snapshot pane flags and dock coordinates; insert a pane relative to another; show/hide; save/load wxAuiManager perspectives | Implemented; exact-head live-editor smoke pending. |
-| AUI pane state/insert/perspective | Query pane flags and dock coordinates, insert relative to an existing pane, show/hide, save and load native perspectives | Implemented; exact-head live-editor smoke pending. |
+| AUI pane state/insert/visibility/perspective | Return stable pane-state snapshots, insert/reposition via wxAuiManager::InsertPane, show/hide, save/load native perspectives | Implemented; exact-head live-editor smoke passed with `aui_ops=1` in both Eeschema and PCB Editor (run 45488120370). |
 | Notebook page lifecycle | Retrieve page handles, query selection, update labels, remove pages without destroying them and explicitly delete pages | Implemented; exact-head Eeschema/PCB Editor smoke passed with `notebook_ops=1` in both editors (run 45484673610). |
 
 
@@ -87,6 +86,14 @@ Both Eeschema (`editor=1`) and PCB Editor (`editor=2`) emitted `native-ui-ready`
 ### PR #9 notebook page lifecycle evidence
 
 The append-only notebook page operations were merged in [PR #9](https://github.com/Uhrendoktor/kicad-unstable-api/pull/9) at commit `17d9c2a5fb087aa1580d580dc8a53ae106dbbfbb`. Exact-head Linux, Windows and macOS fast validation [run 45484687798](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45484687798) passed. Exact-source live validation [run 45484673610](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45484673610) passed using the archived official KiCad nightly package matching the pinned source revision. Both Eeschema (`editor=1`) and PCB Editor (`editor=2`) emitted `native-ui-ready` with `notebook_ops=1`, `menu_ops=1`, and `menu_dispatch=1`. The smoke proved page lookup/identity, selection, page-label round-trip, remove-without-destroy, reinsertion, delete and stale-handle invalidation. The diagnostics are in [artifact 14963222092](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45484673610/artifacts/14963222092). The full job took 194 seconds end-to-end including prerequisite installation; the KUA proxy compilation step took 15 seconds and the smoke-extension build step 3 seconds. No KiCad or GAL source build was run.
+
+### PR #10 AUI pane state and perspective evidence
+
+[PR #10](https://github.com/Uhrendoktor/kicad-unstable-api/pull/10) merged as commit `b95e4929790d32b3635c6be094a9547e1c9bb148`. The append-only ABI exposes a value snapshot of `wxAuiPaneInfo`, relative `InsertPane` for new or existing windows, pane visibility changes, and native `SavePerspective/LoadPerspective`.
+
+Exact-head Linux, Windows and macOS fast validation [run 45488137860](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45488137860) passed. Exact-source live-editor validation [run 45488120370](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45488120370) passed. Both Eeschema (`editor=1`) and PCB Editor (`editor=2`) emitted `native-ui-ready` with `aui_ops=1`, `notebook_ops=1`, `menu_ops=1` and `menu_dispatch=1`; AUI owner-lifetime, sizer, window/control, property-grid and event binding checks also passed.
+
+The smoke covers `GetPane` state/direction/layer/flags, hide/show, perspective size-query and save/load round-trip, inserting a previously unmanaged window, repositioning an already-managed pane, invalid insert-level rejection, detach/destruction and stale-handle invalidation. The artifact [14964718370](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45488120370/artifacts/14964718370) contains both KIFACE proxies, the smoke extension and the two editor logs. The job completed in 168 seconds; KUA proxy and smoke-extension compilation took 11 and 2 seconds respectively. The exact-source official KiCad nightly package was used; no KiCad or GAL source build was run.
 
 ## 3. Native windows and controls
 
