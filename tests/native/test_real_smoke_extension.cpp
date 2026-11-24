@@ -612,6 +612,16 @@ void on_window(const KUA_EditorContext* context)
     const uint64_t menu_bar = frame_window ? g_host->ui_menu_bar_get(frame_window) : 0;
     const int32_t menu_bar_count_before = menu_bar
         ? g_host->ui_menu_bar_get_menu_count(menu_bar) : -1;
+
+    const uint64_t disposable_menu = menu_bar ? g_host->ui_menu_create(frame_window) : 0;
+    const int32_t disposable_menu_item = disposable_menu
+        ? g_host->ui_menu_append(disposable_menu, 61010, "Disposable", "", KUA_UI_MENU_NORMAL)
+        : -1;
+    const int32_t disposable_menu_destroy = disposable_menu_item > 0
+        ? g_host->ui_menu_destroy(disposable_menu) : -1;
+    const int32_t disposable_menu_stale = disposable_menu
+        ? g_host->ui_menu_get_item_count(disposable_menu) : -1;
+
     const uint64_t menu = menu_bar ? g_host->ui_menu_create(frame_window) : 0;
     constexpr int32_t smoke_menu_id = 61000;
     const int32_t menu_item = menu
@@ -620,6 +630,8 @@ void on_window(const KUA_EditorContext* context)
     const int32_t menu_attached = menu_item > 0
         ? g_host->ui_menu_bar_append(menu_bar, menu, "KUA Smoke")
         : -1;
+    const int32_t attached_menu_destroy_rejected = menu_attached > 0
+        ? g_host->ui_menu_destroy(menu) : -2;
     const int32_t duplicate_menu_append = menu_attached > 0
         ? g_host->ui_menu_bar_append(menu_bar, menu, "KUA Duplicate") : 0;
     const int32_t duplicate_menu_insert = menu_attached > 0
@@ -753,6 +765,22 @@ void on_window(const KUA_EditorContext* context)
     const int32_t menu_unbound = menu_binding
         ? g_host->ui_menu_unbind(menu_binding)
         : -1;
+    const int32_t menu_bar_remove = menu_bar_count_after_insert > 0
+        ? g_host->ui_menu_bar_remove(menu_bar,
+              static_cast<uint32_t>(menu_bar_count_after_insert - 1)) : -1;
+    const int32_t menu_bar_count_after_remove = menu_bar_remove > 0
+        ? g_host->ui_menu_bar_get_menu_count(menu_bar) : -1;
+    const int32_t removed_menu_destroy = menu_bar_remove > 0
+        ? g_host->ui_menu_destroy(menu) : -1;
+    const int32_t removed_menu_stale = g_host->ui_menu_get_item_count(menu);
+    const int32_t attached_inserted_menu_destroy_rejected = first_bar_menu
+        ? g_host->ui_menu_destroy(first_bar_menu) : -2;
+    const bool menu_lifetime_ok =
+        disposable_menu_destroy > 0 && disposable_menu_stale == -1 &&
+        attached_menu_destroy_rejected == -1 && menu_bar_remove > 0 &&
+        menu_bar_count_after_remove == menu_bar_count_after_insert - 1 &&
+        removed_menu_destroy > 0 && removed_menu_stale == -1 &&
+        attached_inserted_menu_destroy_rejected == -1;
 
     const uint64_t properties_panel = frame_window
         ? g_host->ui_properties_get_panel(frame_window)
@@ -796,7 +824,7 @@ void on_window(const KUA_EditorContext* context)
 
     char ui_details[1024]{};
     std::snprintf(ui_details, sizeof(ui_details),
-                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|notebook_ops=%d|class=%d|controls=%d|text=%d|checkbox=%d|choice=%d|window_ops=%d|sizer_replace=%d|sizer_destroy=%d|sizer_ownership=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|aui_ops=%d|menu_ops=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
+                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|notebook_ops=%d|class=%d|controls=%d|text=%d|checkbox=%d|choice=%d|window_ops=%d|sizer_replace=%d|sizer_destroy=%d|sizer_ownership=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|aui_ops=%d|menu_ops=%d|menu_lifetime=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
                   frame_window != 0, top_level_initial, dialog != 0, dialog_shown, dialog_hidden,
                   dialog_enumerated, dialog_destroyed, stale_dialog_handle, destroy_probe != 0,
                   destroy_probe_result, stale_destroy_probe, g_destroy_event_handle_valid,
@@ -806,7 +834,7 @@ void on_window(const KUA_EditorContext* context)
                   native_controls_ok, text_control_ok, check_box_ok, choice_control_ok,
                   common_window_ops_ok, sizer_replacement_ok, sizer_owner_destroyed_ok,
                   sizer_ownership_ok, manager != 0, aui_owner_lifetime_ok, pane_added,
-                  aui_updated, pane_detached, menu_attached, aui_ops_ok, menu_ops_ok, menu_binding != 0, menu_dispatch_ok,
+                  aui_updated, pane_detached, menu_attached, aui_ops_ok, menu_ops_ok, menu_lifetime_ok, menu_binding != 0, menu_dispatch_ok,
                   menu_callback_count, menu_unbound, property_result);
     const bool ui_ok = frame_window && top_level_initial > 0 && window_observer &&
                        dialog && dialog_shown > 0 && dialog_hidden > 0 && dialog_enumerated &&
@@ -823,7 +851,8 @@ void on_window(const KUA_EditorContext* context)
                        aui_owner_lifetime_ok && pane_added > 0 && aui_updated > 0 &&
                        pane_detached > 0 && aui_ops_ok &&
                        menu_attached > 0 && menu_ops_ok && menu_binding != 0 && menu_dispatch_ok &&
-                       menu_unbound > 0 && (!property_grid || property_result > 0);
+                       menu_unbound > 0 && menu_lifetime_ok &&
+                       (!property_grid || property_result > 0);
     record(ui_ok ? "native-ui-ready" : "native-ui-failed",
            context->editor_kind, ui_details);
 }
