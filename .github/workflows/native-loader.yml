@@ -178,6 +178,7 @@ jobs:
       # destruction of an editor-owned child frame.
       # Run after the corrected fixture retains its attached menu through OnKifaceEnd.
       # One-shot retry: close the editor frame before checking graceful KIFACE shutdown.
+      # Retry after closing the complete wx top-level window set.
       - name: Run real Eeschema and PCB Editor GAL smoke with graceful KIFACE shutdown
         env:
           KUA_SMOKE_LD_DEBUG: "1"
