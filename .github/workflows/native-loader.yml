@@ -222,9 +222,9 @@ jobs:
                                 if line.startswith(f"shutdown|editor={editor_kind}|")]
               if not shutdown_lines:
                   raise SystemExit(f"{editor} did not call the extension shutdown callback")
-              if not any(line.startswith(f"graceful-frame-close-requested|editor={editor_kind}|")
+              if not any(line.startswith(f"graceful-windows-destroy-requested|editor={editor_kind}|")
                          for line in shutdown_path.read_text(errors="replace").splitlines()):
-                  raise SystemExit(f"{editor} did not close its top-level frame for graceful shutdown")
+                  raise SystemExit(f"{editor} did not request destruction of its top-level windows")
               if not all(token in shutdown_lines[-1]
                          for token in ("attached_stale=-1", "detached_stale=-1")):
                   raise SystemExit(f"{editor} shutdown callback did not observe both menu handles stale")
