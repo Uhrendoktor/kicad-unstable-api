@@ -65,7 +65,7 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            software-properties-common ca-certificates build-essential cmake ninja-build git \
+            ca-certificates curl build-essential cmake ninja-build git \
             gettext pkg-config glslang-tools libbz2-dev libcairo2-dev libglu1-mesa-dev \
             libgl1-mesa-dev libglew-dev libx11-dev libwxgtk3.2-dev \
             libwxgtk-webview3.2-dev mesa-common-dev python3-dev libboost-all-dev \
@@ -77,21 +77,28 @@ jobs:
             libprotobuf-dev protobuf-compiler swig python3-pip python3-venv \
             libzstd-dev libspnav-dev libpoppler-glib-dev libsqlite3-dev xvfb xauth strace
 
-      - name: Install exact pinned KiCad nightly binary package
+      - name: Fetch and install exact pinned KiCad nightly binary package
         run: |
-          add-apt-repository -y ppa:kicad/kicad-dev-nightly
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            "kicad-nightly=${KICAD_NIGHTLY_PACKAGE_VERSION}"
-          installed_version="$(dpkg-query -W -f='${Version}' kicad-nightly)"
-          echo "Installed KiCad nightly package: $installed_version"
-          case "$installed_version" in
+          package="kicad-nightly_${KICAD_NIGHTLY_PACKAGE_VERSION}_amd64.deb"
+          package_url="https://deb.kicad.org/kicad-dev-nightly/ubuntu/pool/main/k/kicad/$package"
+          curl --fail --location --retry 3 --retry-delay 2 "$package_url" --output "/tmp/$package"
+          package_name="$(dpkg-deb --field "/tmp/$package" Package)"
+          package_version="$(dpkg-deb --field "/tmp/$package" Version)"
+          package_arch="$(dpkg-deb --field "/tmp/$package" Architecture)"
+          test "$package_name" = "kicad-nightly"
+          test "$package_arch" = "amd64"
+          case "$package_version" in
             *b7066f8863*) ;;
             *)
-              echo "::error::Installed KiCad package does not match pinned source SHA prefix."
+              echo "::error::Downloaded KiCad package does not match the pinned source SHA prefix."
               exit 1
               ;;
           esac
+          echo "Installing $package_name $package_version ($package_arch) from the official KiCad nightly archive"
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "/tmp/$package"
+          installed_version="$(dpkg-query -W -f='${Version}' kicad-nightly)"
+          test "$installed_version" = "$package_version"
+          echo "Installed KiCad nightly package: $installed_version"
 
       - name: Fetch exact KiCad source for matching headers and generated build metadata
         run: |
