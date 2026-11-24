@@ -509,12 +509,17 @@ void on_window(const KUA_EditorContext* context)
 
     const int32_t perspective_size = manager
         ? g_host->ui_aui_save_perspective(manager, nullptr, 0) : -1;
-    char saved_perspective[8192]{};
+    char saved_perspective[8192];
+    std::memset(saved_perspective, 'X', sizeof(saved_perspective));
     const int32_t perspective_written = perspective_size > 0 &&
                                         perspective_size < static_cast<int32_t>(sizeof(saved_perspective))
         ? g_host->ui_aui_save_perspective(manager, saved_perspective,
                                           sizeof(saved_perspective)) : -1;
-    const int32_t perspective_loaded = perspective_written == perspective_size
+    const int32_t perspective_nul_terminated =
+        perspective_written == perspective_size && perspective_written >= 0 &&
+        perspective_written < static_cast<int32_t>(sizeof(saved_perspective)) &&
+        saved_perspective[perspective_written] == '\0' ? 1 : 0;
+    const int32_t perspective_loaded = perspective_nul_terminated > 0
         ? g_host->ui_aui_load_perspective(manager, saved_perspective, 1) : -1;
 
     const uint64_t insert_panel = frame_window
@@ -565,7 +570,7 @@ void on_window(const KUA_EditorContext* context)
         pane_shown > 0 && pane_show_update > 0 && shown_pane_state_read > 0 &&
         shown_pane_state.is_shown == 1 &&
         perspective_size > 0 && perspective_written == perspective_size &&
-        perspective_loaded > 0 &&
+        perspective_nul_terminated > 0 && perspective_loaded > 0 &&
         pane_inserted > 0 && insert_update > 0 &&
         inserted_pane_state_read > 0 && inserted_pane_state.is_ok == 1 &&
         inserted_pane_state.direction == KUA_AUI_RIGHT &&
