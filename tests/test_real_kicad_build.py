@@ -103,6 +103,21 @@ class RealKiCadBuildToolTests(unittest.TestCase):
             ["_ZN5KIGFX12VIEW_OVERLAY5ClearEv"],
         )
 
+    def test_rejects_hidden_kicad_rtti_imports_that_break_eager_loading(self) -> None:
+        proxy_undefined = (
+            "                 U _ZTI14EDA_DRAW_FRAME\n"
+            "                 U _ZTI16PROPERTIES_PANEL\n"
+            "                 U _ZTI8wxWindow\n"
+        )
+        self.assertEqual(
+            build_proxy.unresolved_hidden_kicad_rtti(proxy_undefined),
+            ["_ZTI14EDA_DRAW_FRAME", "_ZTI16PROPERTIES_PANEL"],
+        )
+
+    def test_allows_exported_wxwidgets_rtti_imports(self) -> None:
+        proxy_undefined = "                 U _ZTI8wxWindow\n"
+        self.assertEqual(build_proxy.unresolved_hidden_kicad_rtti(proxy_undefined), [])
+
     def test_resolves_one_compile_command_for_source_file(self) -> None:
         entry = {"file": str(self.source_file), "directory": str(self.build_dir)}
         result = build_proxy.resolve_entry([entry], "eeschema/eeschema.cpp")
