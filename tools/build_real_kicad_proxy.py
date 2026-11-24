@@ -97,6 +97,21 @@ def parse_nm_symbol_names(output: str) -> set[str]:
     return names
 
 
+HIDDEN_KICAD_RTTI_SYMBOLS = {
+    # These classes are declared without an export annotation in the pinned
+    # KiCad headers and their typeinfo is hidden by kicommon's visibility.
+    # A dynamic_cast in the separately loaded KIFACE creates an unresolved
+    # RTLD_NOW relocation and prevents KIFACE_1 from being entered.
+    "_ZTI14EDA_DRAW_FRAME",
+    "_ZTI16PROPERTIES_PANEL",
+}
+
+
+def unresolved_hidden_kicad_rtti(proxy_undefined: str) -> list[str]:
+    undefined = parse_nm_symbol_names(proxy_undefined)
+    return sorted(undefined & HIDDEN_KICAD_RTTI_SYMBOLS)
+
+
 def missing_gal_symbols(proxy_undefined: str, gal_defined: str) -> list[str]:
     undefined = parse_nm_symbol_names(proxy_undefined)
     defined = parse_nm_symbol_names(gal_defined)
@@ -226,6 +241,13 @@ def main() -> int:
                 ["nm", "-D", "--undefined-only", str(output)],
                 check=True, capture_output=True, text=True,
             ).stdout
+            hidden_rtti = unresolved_hidden_kicad_rtti(undefined)
+            if hidden_rtti:
+                raise ValueError(
+                    f"{output} has unresolved KiCad RTTI symbols that prevent eager KIFACE loading: "
+                    + ", ".join(hidden_rtti)
+                )
+
             gal_defined = subprocess.run(
                 ["nm", "-D", "--defined-only", str(gal_library)],
                 check=True, capture_output=True, text=True,
