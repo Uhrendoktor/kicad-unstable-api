@@ -216,6 +216,29 @@ void remove_menu_bindings_for_window(wxWindow* frame)
 
 void clear_window_observers_for_frame(wxWindow* frame);
 
+void invalidate_ui_owner_handles(wxWindow* owner_window)
+{
+    if (!owner_window)
+        return;
+
+    // A native owner may destroy non-window members (for example a
+    // wxAuiManager stored in the managed wxWindow) before its base wxWindow
+    // destructor emits wxEVT_DESTROY. Revoke those borrowed handles before
+    // invoking extension observers; retain the window's own handle so the
+    // DESTROYING callback can inspect the native window itself.
+    for (auto it = g_ui_handles.begin(); it != g_ui_handles.end();)
+    {
+        const bool is_owner_window_handle =
+            it->second.kind == UiHandleKind::Window &&
+            it->second.pointer == owner_window;
+
+        if (it->second.owner_window == owner_window && !is_owner_window_handle)
+            it = g_ui_handles.erase(it);
+        else
+            ++it;
+    }
+}
+
 void invalidate_ui_window(wxWindow* window, bool destroying = false)
 {
     if (!window)
@@ -338,6 +361,12 @@ public:
             if (window_belongs_to_editor(window, observer.frame))
                 observers.push_back(observer);
         }
+
+        // wxWidgets emits wxEVT_DESTROY from the base wxWindow destructor,
+        // after a derived window's members have already been destroyed. Revoke
+        // handles to owner-bound native members before extension callbacks.
+        if (destroying)
+            invalidate_ui_owner_handles(window);
 
         for (const WindowObserverEntry& observer : observers)
         {
