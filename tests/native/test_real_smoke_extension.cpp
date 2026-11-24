@@ -942,9 +942,7 @@ void on_window(const KUA_EditorContext* context)
                 }
 
                 char details[96]{};
-                std::snprintf(details, sizeof(details), "index=%d|class=%s",
-                              window_index,
-                              window->GetClassInfo() ? window->GetClassInfo()->GetClassName() : "unknown");
+                std::snprintf(details, sizeof(details), "index=%d", window_index);
                 record("graceful-window-destroy-begin", editor_kind, details);
 
                 if (window->Destroy())
