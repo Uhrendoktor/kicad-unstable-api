@@ -27,6 +27,9 @@ uint64_t g_last_destroy_event_handle = 0;
 uint64_t g_managed_aui_manager_handle = 0;
 int g_aui_manager_destroy_callback_result = 0;
 bool g_expect_aui_manager_destroy = false;
+uint32_t g_editor_kind = KUA_EDITOR_UNKNOWN;
+uint64_t g_shutdown_attached_menu = 0;
+uint64_t g_shutdown_detached_menu = 0;
 
 #if defined(KUA_SMOKE_WITH_WX)
 class KuaSmokeManagedAuiPanel final : public wxPanel
@@ -103,6 +106,9 @@ int initialize(const KUA_HostApi* host)
     }
 
     g_host = host;
+    g_editor_kind = host->editor_kind;
+    g_shutdown_attached_menu = 0;
+    g_shutdown_detached_menu = 0;
     record("initialize", host->editor_kind, host->host_build_tag ? host->host_build_tag : "");
     return 1;
 }
@@ -664,6 +670,13 @@ void on_window(const KUA_EditorContext* context)
     const int32_t menu_attached = menu_item > 0
         ? g_host->ui_menu_bar_append(menu_bar, menu, "KUA Smoke")
         : -1;
+    g_shutdown_attached_menu = menu_attached > 0 ? menu : 0;
+    const uint64_t shutdown_detached_menu = menu_bar
+        ? g_host->ui_menu_create(frame_window) : 0;
+    const int32_t shutdown_detached_item = shutdown_detached_menu
+        ? g_host->ui_menu_append(shutdown_detached_menu, 61020, "Shutdown cleanup probe", "",
+                                 KUA_UI_MENU_NORMAL) : -1;
+    g_shutdown_detached_menu = shutdown_detached_item > 0 ? shutdown_detached_menu : 0;
     const int32_t attached_menu_destroy_rejected = menu_attached > 0
         ? g_host->ui_menu_destroy(menu) : -2;
     const int32_t duplicate_menu_append = menu_attached > 0
@@ -885,11 +898,24 @@ void on_window(const KUA_EditorContext* context)
                        sizer_replacement_ok && sizer_owner_destroyed_ok && sizer_ownership_ok &&
                        aui_owner_lifetime_ok && pane_added > 0 && aui_updated > 0 &&
                        pane_detached > 0 && aui_ops_ok &&
-                       menu_attached > 0 && menu_ops_ok && menu_binding != 0 && menu_dispatch_ok &&
+                       menu_attached > 0 && menu_ops_ok && shutdown_detached_item > 0 &&
+                       menu_binding != 0 && menu_dispatch_ok &&
                        menu_unbound > 0 && menu_lifetime_ok &&
                        (!property_grid || property_result > 0);
     record(ui_ok ? "native-ui-ready" : "native-ui-failed",
            context->editor_kind, ui_details);
+#if defined(KUA_SMOKE_WITH_WX)
+    const char* graceful_exit = std::getenv("KUA_SMOKE_GRACEFUL_EXIT");
+    if (ui_ok && graceful_exit && std::strcmp(graceful_exit, "1") == 0 && wxTheApp)
+    {
+        const uint32_t editor_kind = context->editor_kind;
+        wxTheApp->CallAfter([editor_kind]() {
+            record("graceful-exit-requested", editor_kind);
+            if (wxTheApp)
+                wxTheApp->ExitMainLoop();
+        });
+    }
+#endif
 }
 
 void on_menu_command(void* user_data)
@@ -906,7 +932,17 @@ void on_reset(uint32_t editor_kind)
 
 void shutdown()
 {
-    record("shutdown", g_host ? g_host->editor_kind : KUA_EDITOR_UNKNOWN);
+    const int32_t attached_stale = g_host && g_host->ui_menu_get_item_count &&
+                                   g_shutdown_attached_menu
+        ? g_host->ui_menu_get_item_count(g_shutdown_attached_menu) : -999;
+    const int32_t detached_stale = g_host && g_host->ui_menu_get_item_count &&
+                                   g_shutdown_detached_menu
+        ? g_host->ui_menu_get_item_count(g_shutdown_detached_menu) : -999;
+    char details[128]{};
+    std::snprintf(details, sizeof(details),
+                  "attached_stale=%d|detached_stale=%d",
+                  attached_stale, detached_stale);
+    record("shutdown", g_editor_kind, details);
 }
 
 const KUA_ExtensionApi api{
