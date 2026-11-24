@@ -269,7 +269,7 @@ void on_window(const KUA_EditorContext* context)
                         choice_selection == 1 && choice_text > 0 &&
                         std::strcmp(choice_value, "second") == 0 &&
                         choice_clear > 0 && choice_empty_count == 0 &&
-                        choice_empty_selection == wxNOT_FOUND;
+                        choice_empty_selection == -1;
 
     const int32_t disable_window = panel ? g_host->ui_window_enable(panel, 0) : -1;
     const int32_t enable_window = panel ? g_host->ui_window_enable(panel, 1) : -1;
