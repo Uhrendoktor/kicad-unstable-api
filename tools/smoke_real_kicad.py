@@ -112,8 +112,8 @@ def run_editor(
                             exit_code = process.wait(timeout=shutdown_timeout_seconds)
                         except subprocess.TimeoutExpired:
                             failure = (
-                                f"{name} did not exit through wxTheApp->ExitMainLoop() "
-                                f"within {shutdown_timeout_seconds:.1f}s."
+                                f"{name} did not complete normal wx/KiCad shutdown after "
+                                f"top-level close events within {shutdown_timeout_seconds:.1f}s."
                             )
                             break
 
@@ -126,8 +126,8 @@ def run_editor(
                             line for line in final_content.splitlines()
                             if line.startswith(shutdown_prefix)
                         ]
-                        destroy_record = f"graceful-windows-destroy-requested|editor={editor_kind}|"
-                        if exit_code == 0 and destroy_record in final_content and shutdown_lines and all(
+                        close_record = f"graceful-windows-close-requested|editor={editor_kind}|"
+                        if exit_code == 0 and close_record in final_content and shutdown_lines and all(
                             token in shutdown_lines[-1]
                             for token in ("attached_stale=-1", "detached_stale=-1")
                         ):
@@ -139,7 +139,7 @@ def run_editor(
 
                         failure = (
                             f"{name} graceful shutdown failed: exit_code={exit_code}; "
-                            f"windows_destroy_record={destroy_record in final_content}; "
+                            f"windows_close_record={close_record in final_content}; "
                             f"shutdown_record={shutdown_lines[-1] if shutdown_lines else '<missing>'}."
                         )
                         break
