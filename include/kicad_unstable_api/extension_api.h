@@ -297,7 +297,9 @@ typedef struct KUA_HostApi
     int32_t (*ui_aui_insert_pane)(uint64_t manager, uint64_t window,
                                   uint64_t insert_location_window, uint32_t insert_level);
     int32_t (*ui_aui_pane_show)(uint64_t manager, uint64_t window, int32_t shown);
-    /* Returns UTF-8 byte length excluding NUL. A null buffer/capacity 0 queries size. */
+    /* Returns required UTF-8 byte length excluding NUL. Query with buffer=null/capacity=0.
+       If buffer is provided, it is always NUL-terminated when capacity > 0; compare the
+       returned length with capacity to detect truncation and retry with a larger buffer. */
     int32_t (*ui_aui_save_perspective)(uint64_t manager, char* buffer, uint32_t capacity);
     int32_t (*ui_aui_load_perspective)(uint64_t manager,
                                        const char* perspective, int32_t update);
