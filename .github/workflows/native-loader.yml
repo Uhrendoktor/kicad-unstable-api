@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      full_editor_validation:
+        description: Build both pinned KiCad editors and run the real Eeschema/PCB Editor smoke tests
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -34,8 +40,12 @@ jobs:
       - name: Test installer transaction
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
+  # This cold, full-source editor build costs roughly 80-110 Linux runner
+  # minutes. Keep exact-build runtime validation available, but never run it
+  # automatically on every PR or push.
   real-kicad-linux:
-    name: Pinned KiCad production build and live-editor smoke
+    if: github.event_name == 'workflow_dispatch' && inputs.full_editor_validation
+    name: Pinned KiCad production build and live-editor smoke (manual opt-in)
     runs-on: ubuntu-24.04
     container: debian:trixie
     steps:
