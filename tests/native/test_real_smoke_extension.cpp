@@ -629,9 +629,6 @@ void on_window(const KUA_EditorContext* context)
         : nullptr;
     if (menu_owner_probe_frame)
         menu_owner_probe_frame->SetMenuBar(new wxMenuBar());
-#else
-    wxFrame* menu_owner_probe_frame = nullptr;
-#endif
     const uint64_t menu_owner_probe_handle = menu_owner_probe_frame
         ? g_host->ui_window_get_handle(menu_owner_probe_frame) : 0;
     const uint64_t menu_owner_probe_bar = menu_owner_probe_handle
@@ -646,10 +643,8 @@ void on_window(const KUA_EditorContext* context)
     const bool menu_owner_probe_destroyed =
         menu_owner_probe_frame && menu_owner_detached && menu_owner_attached &&
         menu_owner_attached_result > 0 && menu_owner_probe_frame->Destroy();
-#if defined(KUA_SMOKE_WITH_WX)
     if (menu_owner_probe_destroyed)
         wxYieldIfNeeded();
-#endif
     const int32_t menu_owner_detached_stale = menu_owner_detached
         ? g_host->ui_menu_get_item_count(menu_owner_detached) : -1;
     const int32_t menu_owner_attached_stale = menu_owner_attached
@@ -657,6 +652,9 @@ void on_window(const KUA_EditorContext* context)
     const bool menu_owner_destroy_ok =
         menu_owner_probe_destroyed && menu_owner_detached_stale == -1 &&
         menu_owner_attached_stale == -1;
+#else
+    const bool menu_owner_destroy_ok = true;
+#endif
 
     const uint64_t menu = menu_bar ? g_host->ui_menu_create(frame_window) : 0;
     constexpr int32_t smoke_menu_id = 61000;
