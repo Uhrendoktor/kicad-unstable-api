@@ -242,6 +242,16 @@ void install_ui_window_destroy_hook(wxWindow* window)
         return;
 
     window->Bind(wxEVT_DESTROY, [window](wxWindowDestroyEvent& event) {
+        // wxWindowDestroyEvent derives from wxCommandEvent and can propagate
+        // through parent handlers. This hook is installed on every registered
+        // window, so only invalidate the window that the event actually names;
+        // otherwise a child's destroy event would invalidate its editor parent.
+        if (event.GetWindow() != window)
+        {
+            event.Skip();
+            return;
+        }
+
         invalidate_ui_window(window, true);
         if (g_editor_frames.find(window) != g_editor_frames.end())
         {
