@@ -95,7 +95,22 @@ _Static_assert(offsetof(KUA_HostApi, ui_notebook_set_page_text) >
                "Notebook page label setter must follow selection lookup");
 _Static_assert(offsetof(KUA_HostApi, ui_notebook_delete_page) >
                    offsetof(KUA_HostApi, ui_notebook_set_page_text),
-               "Notebook page deletion must remain last in this slice");
+               "Notebook page deletion ordering changed");
+_Static_assert(offsetof(KUA_HostApi, ui_aui_get_pane_state) >
+                   offsetof(KUA_HostApi, ui_notebook_delete_page),
+               "AUI pane state must append after notebook page operations");
+_Static_assert(offsetof(KUA_HostApi, ui_aui_insert_pane) >
+                   offsetof(KUA_HostApi, ui_aui_get_pane_state),
+               "AUI pane insertion must follow pane state lookup");
+_Static_assert(offsetof(KUA_HostApi, ui_aui_pane_show) >
+                   offsetof(KUA_HostApi, ui_aui_insert_pane),
+               "AUI pane visibility must follow insertion");
+_Static_assert(offsetof(KUA_HostApi, ui_aui_save_perspective) >
+                   offsetof(KUA_HostApi, ui_aui_pane_show),
+               "AUI perspective save must follow pane operations");
+_Static_assert(offsetof(KUA_HostApi, ui_aui_load_perspective) >
+                   offsetof(KUA_HostApi, ui_aui_save_perspective),
+               "AUI perspective load must follow save");
 _Static_assert(offsetof(KUA_HostApi, ui_property_grid_delete) >
                    offsetof(KUA_HostApi, ui_property_grid_get_string),
                "Property grid methods must be appended in order");
