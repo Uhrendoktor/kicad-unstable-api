@@ -7,7 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       full_editor_validation:
-        description: Build both pinned KiCad editors and run the real Eeschema/PCB Editor smoke tests
+        description: Restore a previously seeded pinned KiCad runtime and run the live Eeschema/PCB Editor smoke tests
+        required: false
+        default: false
+        type: boolean
+      seed_editor_runtime:
+        description: Explicitly build and cache the pinned KiCad editor runtime once, then run both live-editor smoke tests
         required: false
         default: false
         type: boolean
@@ -23,6 +28,7 @@ jobs:
   native-loader:
     if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     name: ${{ matrix.os }} KIFACE proxy harness
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
@@ -41,27 +47,56 @@ jobs:
       - name: Test installer transaction
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
-  # This cold, full-source editor build costs roughly 80-110 Linux runner
-  # minutes. Keep it opt-in: workflow_dispatch, or one explicitly marked push
-  # to the PR #8 feature branch when a native workflow_dispatch tool is absent.
-  # Ordinary PR/push validation remains the fast three-platform harness only.
+  # The default inner loop above is capped at five minutes and never builds KiCad.
+  # Full editor smoke restores an immutable, toolchain-fingerprinted runtime cache.
+  # A cold seed is a separate, explicit workflow_dispatch operation only.
   real-kicad-linux:
     if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.full_editor_validation) ||
+      (github.event_name == 'workflow_dispatch' &&
+       (inputs.full_editor_validation || inputs.seed_editor_runtime)) ||
       (github.event_name == 'push' &&
        github.ref == 'refs/heads/feature/native-menu-operations' &&
-       startsWith(github.event.head_commit.message, '[full-editor-validation]'))
-    name: Pinned KiCad production build and live-editor smoke (manual opt-in)
+       (startsWith(github.event.head_commit.message, '[full-editor-validation]') ||
+        startsWith(github.event.head_commit.message, '[seed-editor-runtime]')))
+    name: Warm pinned KiCad runtime and live-editor smoke (explicit opt-in)
     runs-on: ubuntu-24.04
     container: debian:trixie
+    timeout-minutes: 180
+    env:
+      KICAD_SOURCE_SHA: b7066f886375b186ca8fa469de3a6382f6bba400
+      KICAD_CACHE_SCHEMA: runtime-v2-pch-mold-o2
     steps:
       - uses: actions/checkout@v4
-      - name: Install KiCad build dependencies
+
+      - name: Resolve requested validation mode
+        id: mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_FULL: ${{ inputs.full_editor_validation }}
+          INPUT_SEED: ${{ inputs.seed_editor_runtime }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          full=false
+          seed=false
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            [ "$INPUT_FULL" = "true" ] && full=true
+            [ "$INPUT_SEED" = "true" ] && seed=true && full=true
+          elif [ "$EVENT_NAME" = "push" ]; then
+            case "$COMMIT_MESSAGE" in
+              "[full-editor-validation]"*) full=true ;;
+              "[seed-editor-runtime]"*) seed=true; full=true ;;
+            esac
+          fi
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "seed=$seed" >> "$GITHUB_OUTPUT"
+          echo "Requested mode: full=$full seed=$seed"
+
+      - name: Install native build and smoke dependencies
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build git gettext pkg-config glslang-tools \
-            libbz2-dev libcairo2-dev libglu1-mesa-dev libgl1-mesa-dev \
+            ccache mold libbz2-dev libcairo2-dev libglu1-mesa-dev libgl1-mesa-dev \
             libglew-dev libx11-dev libwxgtk3.2-dev libwxgtk-webview3.2-dev \
             mesa-common-dev python3-dev python3-wxgtk4.0 libboost-all-dev \
             libglm-dev libcurl4-openssl-dev libgtk-3-dev libngspice0-dev \
@@ -71,51 +106,185 @@ jobs:
             shared-mime-info libgit2-dev libsecret-1-dev libnng-dev \
             libprotobuf-dev protobuf-compiler swig python3-pip python3-venv \
             libzstd-dev libspnav-dev libpoppler-glib-dev libsqlite3-dev xvfb xauth strace
+
+      - name: Fingerprint compiler and installed toolchain
+        id: toolchain
+        run: |
+          {
+            gcc --version | head -n 1
+            g++ --version | head -n 1
+            cmake --version | head -n 1
+            ninja --version
+            mold --version | head -n 1
+            dpkg-query -W -f='${binary:Package}=${Version}\n' | sort
+          } > .toolchain-fingerprint.txt
+          fingerprint="$(sha256sum .toolchain-fingerprint.txt | cut -c1-24)"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+          mkdir -p "$GITHUB_WORKSPACE/.cache/ccache"
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.cache/ccache" >> "$GITHUB_ENV"
+          echo "CCACHE_MAXSIZE=4G" >> "$GITHUB_ENV"
+          ccache --set-config=cache_dir="$GITHUB_WORKSPACE/.cache/ccache"
+          ccache --set-config=max_size=4G
+          printf 'Toolchain fingerprint: %s\n' "$fingerprint"
+          printf 'Available CPUs: '; nproc
+          printf 'Memory: '; awk '/MemTotal/ {print $2 " kB"}' /proc/meminfo
+          printf 'Mold linker probe: '
+          printf 'int main(){return 0;}\n' | g++ -x c++ -fuse-ld=mold -o /tmp/kua-mold-probe -
+          /tmp/kua-mold-probe
+
+      - name: Restore exact pinned KiCad source and editor build tree
+        id: runtime-cache
+        if: steps.mode.outputs.full == 'true' || steps.mode.outputs.seed == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .cache/kicad-source
+            .cache/kicad-build
+            .cache/ccache
+          key: kicad-runtime-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.fingerprint }}-${{ env.KICAD_SOURCE_SHA }}-${{ env.KICAD_CACHE_SCHEMA }}
+
+      - name: Fail fast when the reusable runtime has not been seeded
+        if: steps.mode.outputs.full == 'true' && steps.mode.outputs.seed != 'true' && steps.runtime-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "::error::No exact pinned KiCad runtime cache exists for this runner/toolchain/source fingerprint."
+          echo "Run workflow_dispatch with seed_editor_runtime=true once, then use full_editor_validation=true for warm smoke iterations."
+          echo "No source build was started; the normal PR matrix remains available."
+          exit 1
+
       - name: Fetch pinned KiCad source
+        if: steps.runtime-cache.outputs.cache-hit != 'true' && steps.mode.outputs.seed == 'true'
         run: |
-          git init /tmp/kicad-source
-          git -C /tmp/kicad-source remote add origin https://github.com/KiCad/kicad-source-mirror.git
-          git -C /tmp/kicad-source fetch --depth=1 origin b7066f886375b186ca8fa469de3a6382f6bba400
-          git -C /tmp/kicad-source checkout --detach FETCH_HEAD
-      - name: Configure matching KiCad build tree
+          mkdir -p .cache
+          git init .cache/kicad-source
+          git -C .cache/kicad-source remote add origin https://github.com/KiCad/kicad-source-mirror.git
+          git -C .cache/kicad-source fetch --depth=1 origin "$KICAD_SOURCE_SHA"
+          git -C .cache/kicad-source checkout --detach FETCH_HEAD
+          test "$(git -C .cache/kicad-source rev-parse HEAD)" = "$KICAD_SOURCE_SHA"
+
+      - name: Configure optimized pinned KiCad build
+        if: steps.runtime-cache.outputs.cache-hit != 'true' && steps.mode.outputs.seed == 'true'
         run: |
-          cmake -S /tmp/kicad-source -B /tmp/kicad-build -G Ninja \
+          cmake -S .cache/kicad-source -B .cache/kicad-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_FLAGS_RELEASE="-O2 -DNDEBUG" \
+            -DCMAKE_CXX_FLAGS_RELEASE="-O2 -DNDEBUG" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" \
+            -DCMAKE_MODULE_LINKER_FLAGS="-fuse-ld=mold" \
             -DKICAD_USE_CMAKE_FINDPROTOBUF=ON \
-            -DKICAD_USE_PCH=OFF \
+            -DKICAD_USE_PCH=ON \
             -DKICAD_SCRIPTING_WXPYTHON=OFF \
             -DKICAD_BUILD_QA_TESTS=OFF \
             -DKICAD_BUILD_I18N=OFF
+
       - name: Build KiCad GAL shared library for proxy runtime dependency
-        run: cmake --build /tmp/kicad-build --parallel 2 --target gal
-      - name: Compile both production KIFACE proxies against KiCad headers and GAL
+        if: steps.runtime-cache.outputs.cache-hit != 'true' && steps.mode.outputs.seed == 'true'
+        run: cmake --build .cache/kicad-build --parallel "$(nproc)" --target gal
+
+      - name: Compile both production KIFACE proxies against pinned KiCad headers and GAL
+        if: steps.mode.outputs.full == 'true'
         run: |
           python3 tools/build_real_kicad_proxy.py \
-            --kicad-source /tmp/kicad-source \
-            --kicad-build /tmp/kicad-build \
+            --kicad-source .cache/kicad-source \
+            --kicad-build .cache/kicad-build \
             --output-dir build/real-kicad
-      - name: Build matching Eeschema and PCB Editor binaries
-        run: cmake --build /tmp/kicad-build --parallel 2 --target eeschema pcbnew
+
+      - name: Build matching Eeschema and PCB Editor binaries (seed only)
+        if: steps.runtime-cache.outputs.cache-hit != 'true' && steps.mode.outputs.seed == 'true'
+        run: cmake --build .cache/kicad-build --parallel "$(nproc)" --target eeschema pcbnew
+
+      - name: Verify pinned runtime manifest and required files
+        if: steps.mode.outputs.full == 'true'
+        env:
+          TOOLCHAIN_FINGERPRINT: ${{ steps.toolchain.outputs.fingerprint }}
+        run: |
+          set -eu
+          test "$(git -C .cache/kicad-source rev-parse HEAD)" = "$KICAD_SOURCE_SHA"
+          test -f .cache/kicad-build/compile_commands.json
+          test -f .cache/kicad-build/common/gal/libkigal.so
+          test -x .cache/kicad-build/eeschema/eeschema
+          test -x .cache/kicad-build/pcbnew/pcbnew
+          manifest=".cache/kicad-build/kua-runtime-manifest.txt"
+          expected="$(printf '%s\n%s\n%s\n' "$KICAD_SOURCE_SHA" "$TOOLCHAIN_FINGERPRINT" "$KICAD_CACHE_SCHEMA")"
+          if [ -f "$manifest" ]; then
+            actual="$(cat "$manifest")"
+            [ "$actual" = "$expected" ] || {
+              echo "::error::Cached KiCad runtime manifest does not match requested source/toolchain/schema."
+              exit 1
+            }
+          else
+            [ "${{ steps.mode.outputs.seed }}" = "true" ] || {
+              echo "::error::Runtime manifest missing from restored cache."
+              exit 1
+            }
+            printf '%s' "$expected" > "$manifest"
+          fi
+
       - name: Build live-editor GAL smoke extension
+        if: steps.mode.outputs.full == 'true'
         run: |
           cmake -S . -B build/smoke-extension -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DKUA_SMOKE_WITH_WX=ON
           cmake --build build/smoke-extension --target kua_real_smoke_extension --parallel
+
       - name: Run real Eeschema and PCB Editor GAL smoke test
+        if: steps.mode.outputs.full == 'true'
         env:
           KUA_SMOKE_LD_DEBUG: "1"
         run: |
           xvfb-run -a -s "-screen 0 1920x1080x24" python3 tools/smoke_real_kicad.py \
-            --eeschema-install-dir /tmp/kicad-build/eeschema \
-            --pcbnew-install-dir /tmp/kicad-build/pcbnew \
+            --eeschema-install-dir .cache/kicad-build/eeschema \
+            --pcbnew-install-dir .cache/kicad-build/pcbnew \
             --proxy-dir build/real-kicad \
             --smoke-extension build/smoke-extension/kua_real_smoke_extension.so \
-            --eeschema /tmp/kicad-build/eeschema/eeschema \
-            --pcbnew /tmp/kicad-build/pcbnew/pcbnew \
+            --eeschema .cache/kicad-build/eeschema/eeschema \
+            --pcbnew .cache/kicad-build/pcbnew/pcbnew \
             --diagnostics-dir build/real-kicad-diagnostics \
             --timeout 180
+
+      - name: Require explicit menu_ops=1 in both editor diagnostics
+        if: steps.mode.outputs.full == 'true'
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          required = {
+              "eeschema": "native-ui-ready|editor=1|",
+              "pcbnew": "native-ui-ready|editor=2|",
+          }
+          for editor, prefix in required.items():
+              path = Path("build/real-kicad-diagnostics") / f"{editor}-extension.log"
+              if not path.is_file():
+                  raise SystemExit(f"Missing editor diagnostics: {path}")
+              matching = [line for line in path.read_text(errors="replace").splitlines()
+                          if line.startswith(prefix)]
+              if not matching:
+                  raise SystemExit(f"{editor} did not record {prefix}")
+              if not any(re.search(r"(?:^|\|)menu_ops=1(?:\||$)", line) for line in matching):
+                  raise SystemExit(f"{editor} native-ui-ready record lacks menu_ops=1")
+              print(f"PASS {editor}: {matching[-1]}")
+          PY
+
+      - name: Report build cache and compiler cache size
+        if: always() && (steps.mode.outputs.full == 'true' || steps.mode.outputs.seed == 'true')
+        run: |
+          du -sh .cache/kicad-source .cache/kicad-build .cache/ccache 2>/dev/null || true
+          ccache --show-stats || true
+
+      - name: Save the seeded pinned KiCad editor runtime
+        if: success() && steps.mode.outputs.seed == 'true' && steps.runtime-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .cache/kicad-source
+            .cache/kicad-build
+            .cache/ccache
+          key: kicad-runtime-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.fingerprint }}-${{ env.KICAD_SOURCE_SHA }}-${{ env.KICAD_CACHE_SCHEMA }}
+
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && (steps.mode.outputs.full == 'true' || steps.mode.outputs.seed == 'true')
         with:
           name: real-kicad-linux-proxies-and-diagnostics
           path: |
