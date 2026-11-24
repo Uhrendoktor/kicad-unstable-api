@@ -157,7 +157,7 @@ Expose wxMenuBar/wxMenu methods and events so plugins can insert their own menu 
 - `UI.Menu.SetLabel(menu, id, label)`
 - `UI.Menu.BindEvent/UnbindEvent(frame, menu_id, callback_id)`
 
-Menu-bar bindings expose count/index lookup, insertion, title get/set, append and removal. Menu bindings expose item count, insertion of normal/check/radio items, separator append/insert, enable/check state get/set, and label get/set. Item operations validate IDs and checkability; menu-bar insertion rejects menus created for another editor. All calls execute on the editor GUI thread.
+Menu-bar bindings expose count/index lookup, insertion, title get/set, append and removal. Menu bindings expose item count, insertion of normal/check/radio items, separator append/insert, enable/check state get/set, and label get/set. Item operations validate IDs and checkability; menu-bar append/insert reject menus created for another editor or menus already attached to a menu bar. All calls execute on the editor GUI thread.
 
 Use unique IDs. Menu callbacks use a per-binding wxEvtHandler object attached to the target frame; dispatch is independent of wxCommandEvent::GetEventObject(), which wxWidgets sets to the source wxMenu. Unbinding removes only the matching handler object and ID, leaving unrelated KiCad or plugin handlers intact. Editor close and extension shutdown disconnect outstanding KUA menu handlers before their callback state is released.
 
