@@ -1634,7 +1634,17 @@ int32_t ui_aui_insert_pane(uint64_t manager_handle, uint64_t window_handle,
     // InsertPane adjusts the manager's internal pane array and may reallocate it.
     // Pass a value copy rather than a reference into that array: wxAuiManager
     // reads the location again after shifting panes.
-    const wxAuiPaneInfo insert_location_snapshot = insert_location;
+    wxAuiPaneInfo insert_location_snapshot = insert_location;
+    // wxAuiManager::InsertPane uses the copied PaneInfo in AddPane when the
+    // destination window is not already managed. Point that copy at the
+    // destination (not the reference pane) and supply a manager-unique name;
+    // otherwise AddPane sees the reference pane's existing window/name and
+    // rejects the new pane as a duplicate. For an existing destination pane,
+    // InsertPane uses this same snapshot only for its docking coordinates.
+    insert_location_snapshot.window = window;
+    insert_location_snapshot.name =
+        wxString::Format("KUA_AuiPane_%llx",
+                         static_cast<unsigned long long>(window_handle));
     return manager->InsertPane(window, insert_location_snapshot, native_insert_level) ? 1 : 0;
 }
 
