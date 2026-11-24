@@ -176,6 +176,7 @@ jobs:
 
       # The native smoke also covers detached/attached KUA menu cleanup on
       # destruction of an editor-owned child frame.
+      # Run after the corrected fixture retains its attached menu through OnKifaceEnd.
       - name: Run real Eeschema and PCB Editor GAL smoke with graceful KIFACE shutdown
         env:
           KUA_SMOKE_LD_DEBUG: "1"
