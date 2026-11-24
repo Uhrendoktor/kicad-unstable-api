@@ -1090,6 +1090,46 @@ int32_t ui_notebook_get_page_text(uint64_t notebook_handle, uint32_t index,
     return 1;
 }
 
+uint64_t ui_notebook_get_page(uint64_t notebook_handle, uint32_t index)
+{
+    if (!on_gui_thread())
+        return 0;
+    auto* notebook = wxDynamicCast(find_ui_window(notebook_handle), wxNotebook);
+    UiHandleEntry* entry = find_ui_handle(notebook_handle, UiHandleKind::Window);
+    if (!notebook || !entry || index >= notebook->GetPageCount())
+        return 0;
+    return register_ui_window(notebook->GetPage(index), entry->frame);
+}
+
+int32_t ui_notebook_get_selection(uint64_t notebook_handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    auto* notebook = wxDynamicCast(find_ui_window(notebook_handle), wxNotebook);
+    return notebook ? notebook->GetSelection() : -1;
+}
+
+int32_t ui_notebook_set_page_text(uint64_t notebook_handle, uint32_t index,
+                                  const char* text)
+{
+    if (!on_gui_thread() || !text)
+        return -1;
+    auto* notebook = wxDynamicCast(find_ui_window(notebook_handle), wxNotebook);
+    if (!notebook || index >= notebook->GetPageCount())
+        return -1;
+    return notebook->SetPageText(index, wxString::FromUTF8(text)) ? 1 : 0;
+}
+
+int32_t ui_notebook_delete_page(uint64_t notebook_handle, uint32_t index)
+{
+    if (!on_gui_thread())
+        return -1;
+    auto* notebook = wxDynamicCast(find_ui_window(notebook_handle), wxNotebook);
+    if (!notebook || index >= notebook->GetPageCount())
+        return -1;
+    return notebook->DeletePage(index) ? 1 : 0;
+}
+
 uint64_t ui_menu_bar_get(uint64_t frame_handle)
 {
     if (!on_gui_thread())
@@ -1793,6 +1833,10 @@ int32_t ui_notebook_remove_page(uint64_t, uint32_t) { return -1; }
 int32_t ui_notebook_get_page_count(uint64_t) { return -1; }
 int32_t ui_notebook_set_selection(uint64_t, int32_t) { return -1; }
 int32_t ui_notebook_get_page_text(uint64_t, uint32_t, char*, uint32_t) { return -1; }
+uint64_t ui_notebook_get_page(uint64_t, uint32_t) { return 0; }
+int32_t ui_notebook_get_selection(uint64_t) { return -1; }
+int32_t ui_notebook_set_page_text(uint64_t, uint32_t, const char*) { return -1; }
+int32_t ui_notebook_delete_page(uint64_t, uint32_t) { return -1; }
 uint64_t ui_menu_bar_get(uint64_t) { return 0; }
 uint64_t ui_menu_create(uint64_t) { return 0; }
 int32_t ui_menu_append(uint64_t, int32_t, const char*, const char*, uint32_t) { return -1; }
@@ -2030,6 +2074,10 @@ KUA_HostApi make_host_api()
     host.ui_property_grid_set_string = &ui_property_grid_set_string;
     host.ui_property_grid_get_string = &ui_property_grid_get_string;
     host.ui_property_grid_delete = &ui_property_grid_delete;
+    host.ui_notebook_get_page = &ui_notebook_get_page;
+    host.ui_notebook_get_selection = &ui_notebook_get_selection;
+    host.ui_notebook_set_page_text = &ui_notebook_set_page_text;
+    host.ui_notebook_delete_page = &ui_notebook_delete_page;
     return host;
 }
 

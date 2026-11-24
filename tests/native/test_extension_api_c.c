@@ -83,7 +83,19 @@ _Static_assert(offsetof(KUA_HostApi, ui_menu_set_label) >
                "Menu label setter order changed");
 _Static_assert(offsetof(KUA_HostApi, ui_menu_get_label) >
                    offsetof(KUA_HostApi, ui_menu_set_label),
-               "Menu label getter must remain last in this slice");
+               "Menu label getter ordering changed");
+_Static_assert(offsetof(KUA_HostApi, ui_notebook_get_page) >
+                   offsetof(KUA_HostApi, ui_menu_get_label),
+               "Notebook page APIs must append after the menu API");
+_Static_assert(offsetof(KUA_HostApi, ui_notebook_get_selection) >
+                   offsetof(KUA_HostApi, ui_notebook_get_page),
+               "Notebook selection getter must follow page lookup");
+_Static_assert(offsetof(KUA_HostApi, ui_notebook_set_page_text) >
+                   offsetof(KUA_HostApi, ui_notebook_get_selection),
+               "Notebook page label setter must follow selection lookup");
+_Static_assert(offsetof(KUA_HostApi, ui_notebook_delete_page) >
+                   offsetof(KUA_HostApi, ui_notebook_set_page_text),
+               "Notebook page deletion must remain last in this slice");
 _Static_assert(offsetof(KUA_HostApi, ui_property_grid_delete) >
                    offsetof(KUA_HostApi, ui_property_grid_get_string),
                "Property grid methods must be appended in order");

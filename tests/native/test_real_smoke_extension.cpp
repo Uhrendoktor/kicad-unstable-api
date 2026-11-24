@@ -6,7 +6,9 @@
 #include <cstdlib>
 
 #if defined(KUA_SMOKE_WITH_WX)
+#include <wx/app.h>
 #include <wx/event.h>
+#include <wx/notebook.h>
 #include <wx/frame.h>
 #include <wx/menu.h>
 #include <wx/sizer.h>
@@ -203,6 +205,61 @@ void on_window(const KUA_EditorContext* context)
         ? g_host->ui_notebook_add_page(notebook, page, "Native binding", 1)
         : -1;
     const int32_t page_count = notebook ? g_host->ui_notebook_get_page_count(notebook) : -1;
+    const int32_t page_selection = notebook ? g_host->ui_notebook_get_selection(notebook) : -2;
+    const uint64_t retrieved_page = notebook
+        ? g_host->ui_notebook_get_page(notebook, 0) : 0;
+    char initial_page_text[96]{};
+    const int32_t initial_page_text_read = notebook
+        ? g_host->ui_notebook_get_page_text(notebook, 0,
+                                            initial_page_text, sizeof(initial_page_text)) : -1;
+    const int32_t page_text_set = notebook
+        ? g_host->ui_notebook_set_page_text(notebook, 0, "Native page renamed") : -1;
+    char updated_page_text[96]{};
+    const int32_t updated_page_text_read = notebook
+        ? g_host->ui_notebook_get_page_text(notebook, 0,
+                                            updated_page_text, sizeof(updated_page_text)) : -1;
+
+    const uint64_t second_page = notebook
+        ? g_host->ui_window_create(notebook, KUA_UI_WINDOW_PANEL, -1, "second page", 0) : 0;
+    const int32_t second_page_inserted = notebook && second_page
+        ? g_host->ui_notebook_insert_page(notebook, 0, second_page, "Second", 1) : -1;
+    const uint64_t retrieved_second_page = second_page_inserted > 0
+        ? g_host->ui_notebook_get_page(notebook, 0) : 0;
+    const int32_t second_page_selection = notebook
+        ? g_host->ui_notebook_get_selection(notebook) : -2;
+    const int32_t second_page_removed = second_page_inserted > 0
+        ? g_host->ui_notebook_remove_page(notebook, 0) : -1;
+    char removed_page_class[64]{};
+    const int32_t removed_page_still_live = second_page
+        ? g_host->ui_window_get_class_name(second_page, removed_page_class,
+                                           sizeof(removed_page_class)) : -1;
+    const int32_t second_page_reinserted = second_page_removed > 0
+        ? g_host->ui_notebook_insert_page(notebook, 0, second_page,
+                                          "Second restored", 1) : -1;
+    const int32_t second_page_deleted = second_page_reinserted > 0
+        ? g_host->ui_notebook_delete_page(notebook, 0) : -1;
+#if defined(KUA_SMOKE_WITH_WX)
+    if (second_page_deleted > 0)
+        wxYieldIfNeeded();
+#endif
+    char deleted_page_class[64]{};
+    const int32_t deleted_page_stale = second_page
+        ? g_host->ui_window_get_class_name(second_page, deleted_page_class,
+                                           sizeof(deleted_page_class)) : -1;
+    const int32_t page_count_after_delete = notebook
+        ? g_host->ui_notebook_get_page_count(notebook) : -1;
+    const int notebook_ops_ok =
+        page_added > 0 && page_count == 1 && page_selection == 0 &&
+        retrieved_page == page &&
+        initial_page_text_read > 0 &&
+        std::strcmp(initial_page_text, "Native binding") == 0 &&
+        page_text_set > 0 && updated_page_text_read > 0 &&
+        std::strcmp(updated_page_text, "Native page renamed") == 0 &&
+        second_page_inserted > 0 && retrieved_second_page == second_page &&
+        second_page_selection == 0 && second_page_removed > 0 &&
+        removed_page_still_live > 0 && second_page_reinserted > 0 &&
+        second_page_deleted > 0 && deleted_page_stale == -1 &&
+        page_count_after_delete == 1;
 
     char class_name[128]{};
     const int32_t class_read = notebook
@@ -658,13 +715,13 @@ void on_window(const KUA_EditorContext* context)
 
     char ui_details[1024]{};
     std::snprintf(ui_details, sizeof(ui_details),
-                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|class=%d|controls=%d|text=%d|checkbox=%d|choice=%d|window_ops=%d|sizer_replace=%d|sizer_destroy=%d|sizer_ownership=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|menu_ops=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
+                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|notebook_ops=%d|class=%d|controls=%d|text=%d|checkbox=%d|choice=%d|window_ops=%d|sizer_replace=%d|sizer_destroy=%d|sizer_ownership=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|menu_ops=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
                   frame_window != 0, top_level_initial, dialog != 0, dialog_shown, dialog_hidden,
                   dialog_enumerated, dialog_destroyed, stale_dialog_handle, destroy_probe != 0,
                   destroy_probe_result, stale_destroy_probe, g_destroy_event_handle_valid,
                   expired_destroy_event_handle, window_observer_removed,
                   g_window_shown_events, g_window_hidden_events, g_window_destroying_events,
-                  panel != 0, panel_destroyed, page_added, page_count, class_read,
+                  panel != 0, panel_destroyed, page_added, page_count, notebook_ops_ok, class_read,
                   native_controls_ok, text_control_ok, check_box_ok, choice_control_ok,
                   common_window_ops_ok, sizer_replacement_ok, sizer_owner_destroyed_ok,
                   sizer_ownership_ok, manager != 0, aui_owner_lifetime_ok, pane_added,
@@ -672,6 +729,7 @@ void on_window(const KUA_EditorContext* context)
                   menu_callback_count, menu_unbound, property_result);
     const bool ui_ok = frame_window && top_level_initial > 0 && window_observer &&
                        dialog && dialog_shown > 0 && dialog_hidden > 0 && dialog_enumerated &&
+                       notebook_ops_ok &&
                        dialog_destroyed > 0 && stale_dialog_handle == -1 &&
                        g_destroy_event_handle_valid > 0 && expired_destroy_event_handle == -1 &&
                        window_observer_removed > 0 && g_window_shown_events > 0 &&

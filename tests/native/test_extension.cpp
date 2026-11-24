@@ -42,6 +42,8 @@ int initialize(const KUA_HostApi* host)
         !host->ui_menu_insert_separator || !host->ui_menu_enable || !host->ui_menu_check ||
         !host->ui_menu_is_enabled || !host->ui_menu_is_checked ||
         !host->ui_menu_set_label || !host->ui_menu_get_label ||
+        !host->ui_notebook_get_page || !host->ui_notebook_get_selection ||
+        !host->ui_notebook_set_page_text || !host->ui_notebook_delete_page ||
         !host->ui_aui_get_manager || !host->ui_aui_add_pane ||
         !host->ui_properties_get_panel || !host->ui_properties_get_grid ||
         !host->ui_property_grid_append_string || !host->ui_property_grid_delete)
@@ -93,6 +95,10 @@ int initialize(const KUA_HostApi* host)
         host->ui_menu_is_checked(0, 1) != -1 ||
         host->ui_menu_set_label(0, 1, "") != -1 ||
         host->ui_menu_get_label(0, 1, nullptr, 0) != -1 ||
+        host->ui_notebook_get_page(0, 0) != 0 ||
+        host->ui_notebook_get_selection(0) != -1 ||
+        host->ui_notebook_set_page_text(0, 0, "") != -1 ||
+        host->ui_notebook_delete_page(0, 0) != -1 ||
         host->ui_aui_get_manager(0) != 0 ||
         host->ui_aui_add_pane(0, 0, nullptr) != -1 ||
         host->ui_properties_get_panel(0) != 0 ||
