@@ -87,7 +87,7 @@ Expose wxWidgets windows and controls so plugins can create native subwindows in
 
 The current native binding slice adds `ui_window_get_top_level_windows(editor_frame, handles, capacity)`, which lists top-level wxWindows whose parent chain leads to the given editor. This includes native modal Properties dialogs parented to that editor. It also adds `ui_window_observe(editor_frame, callback, user_data)` / `ui_window_unobserve(observer)`. Observers receive opaque handles and one of `KUA_UI_WINDOW_SHOWN`, `KUA_UI_WINDOW_HIDDEN` or `KUA_UI_WINDOW_DESTROYING`. The observer is a thin `wxEventFilter` over existing wxWidgets events; it always returns `Event_Skip` so KiCad continues processing them normally. Notifications run on the GUI thread. A handle received for `DESTROYING` is valid only during that callback.
 
-Every registered native window has a `wxEVT_DESTROY` cleanup hook. Destroying a window invalidates its window handle and handles for resources owned by that window, including an attached sizer or property grid. Destroying the editor invalidates all remaining handles and removes its observers. These lifetime rules apply to native windows destroyed by KiCad as well as windows explicitly destroyed through KUA.
+Every registered native window has a `wxEVT_DESTROY` cleanup hook. Destroying a window invalidates its window handle and handles for resources owned by that window, including an attached sizer or property grid. Owner-bound native handles are revoked before `DESTROYING` observers run: wxWidgets emits `wxEVT_DESTROY` from the base window destructor, after derived members such as a member-owned `wxAuiManager` have already been destroyed. The temporary window handle remains valid only for the callback; owned manager/sizer/menu handles do not. Destroying the editor invalidates all remaining handles and removes its observers. These lifetime rules apply to native windows destroyed by KiCad as well as windows explicitly destroyed through KUA.
 
 Supported control kinds should include wxDialog, wxFrame, wxPanel, wxNotebook, wxButton, wxTextCtrl, wxChoice, wxCheckBox, wxStaticText, wxListCtrl, wxTreeCtrl, wxGrid and wxPropertyGrid. Add native wxWidgets control types as required; do not create feature-specific KUA widgets.
 
@@ -164,7 +164,7 @@ Expose wxAuiManager and wxAuiPaneInfo directly:
 
 Expose native pane properties: name, caption, left/right/top/bottom, center, floating position/size, best/min/max size, layer, row, position, show/hide, close/pin buttons, movable, resizable, dockable, toolbar and border flags.
 
-wxWidgets `wxAuiManager::GetManager(wxWindow*)` accepts the managed frame or any child/grandchild. The pinned KiCad source calls it from a child pane. This avoids an Eeschema-only AUI accessor. Plugins create their own wxPanel/window, add it to the existing manager and choose pane settings. Never call UnInit on KiCad's manager.
+wxWidgets `wxAuiManager::GetManager(wxWindow*)` accepts the managed frame or any child/grandchild. The pinned KiCad source calls it from a child pane. This avoids an Eeschema-only AUI accessor. A manager handle is borrowed and tied to `GetManagedWindow()`: it is invalidated before `DESTROYING` callbacks for that window, because a member-owned manager may already have been destructed before `wxEVT_DESTROY` is emitted. Plugins create their own wxPanel/window, add it to the existing manager and choose pane settings. Never call UnInit on KiCad's manager.
 
 ## 7. Existing Properties panel and property-grid operations
 
