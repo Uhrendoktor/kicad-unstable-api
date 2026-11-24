@@ -951,10 +951,12 @@ void on_window(const KUA_EditorContext* context)
                     const wxClassInfo* class_info = window->GetClassInfo();
                     wxWindow* parent = window->GetParent();
                     const wxClassInfo* parent_info = parent ? parent->GetClassInfo() : nullptr;
-                    const wxString class_name =
-                        class_info ? class_info->GetClassName() : wxString("unknown");
-                    const wxString parent_class =
-                        parent_info ? parent_info->GetClassName() : wxString("none");
+                    wxString class_name("unknown");
+                    if (class_info)
+                        class_name = class_info->GetClassName();
+                    wxString parent_class("none");
+                    if (parent_info)
+                        parent_class = parent_info->GetClassName();
                     const auto class_utf8 = class_name.utf8_str();
                     const auto parent_utf8 = parent_class.utf8_str();
                     char details[256]{};
