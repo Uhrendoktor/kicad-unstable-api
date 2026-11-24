@@ -45,6 +45,8 @@ jobs:
   # The default inner loop above is capped at five minutes and never builds KiCad.
   # Full editor smoke uses the official KiCad nightly binary package built from
   # the exact pinned source commit. Only KUA's proxies and smoke fixture compile.
+  # Fetch the exact versioned .deb from KiCad's official pool: Launchpad can
+  # prune a package from its apt index while the immutable versioned archive remains.
   real-kicad-linux:
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.full_editor_validation) ||
