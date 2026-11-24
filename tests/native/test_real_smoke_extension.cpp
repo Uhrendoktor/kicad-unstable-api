@@ -4,6 +4,7 @@
 #include <cstring>
 #include <string>
 #include <cstdlib>
+#include <vector>
 
 #if defined(KUA_SMOKE_WITH_WX)
 #include <wx/app.h>
@@ -915,19 +916,48 @@ void on_window(const KUA_EditorContext* context)
         wxWeakRef<wxWindow> weak_frame(static_cast<wxWindow*>(context->frame));
         wxTheApp->CallAfter([editor_kind, weak_frame]() mutable {
             record("graceful-exit-requested", editor_kind);
-            wxWindow* frame = weak_frame.get();
-            const bool close_requested = frame && frame->Close(true);
-            record(close_requested ? "graceful-frame-close-requested"
-                                   : "graceful-frame-close-failed",
-                   editor_kind);
-            if (wxTheApp)
+            wxTheApp->SetExitOnFrameDelete(true);
+
+            // KiCad can have a project-manager top-level window in addition to
+            // the active editor frame. Closing only context->frame leaves the
+            // app alive, so snapshot all current top-level windows as weak refs.
+            std::vector<wxWeakRef<wxWindow>> top_level_windows;
+            for (wxWindowList::compatibility_iterator node = wxTopLevelWindows.GetFirst();
+                 node; node = node->GetNext())
             {
-                // Process the close event and deferred frame destruction before
-                // ending the main loop. KiCad's OnExit drains wxPendingDelete.
-                wxYieldIfNeeded();
-                if (wxTheApp)
-                    wxTheApp->ExitMainLoop();
+                if (wxWindow* window = node->GetData())
+                    top_level_windows.emplace_back(window);
             }
+
+            int32_t close_requested = 0;
+            int32_t close_failed = 0;
+            for (auto& weak_window : top_level_windows)
+            {
+                wxWindow* window = weak_window.get();
+                if (!window || window->IsBeingDeleted())
+                    continue;
+
+                if (window->Close(true))
+                    ++close_requested;
+                else
+                    ++close_failed;
+
+                // Process Close events and deferred wxPendingDelete objects so
+                // each subsequent weak reference is revalidated before use.
+                wxYieldIfNeeded();
+            }
+
+            char close_details[96]{};
+            std::snprintf(close_details, sizeof(close_details),
+                          "top_level=%zu|close_requested=%d|close_failed=%d",
+                          top_level_windows.size(), close_requested, close_failed);
+            record(close_requested > 0 && close_failed == 0
+                       ? "graceful-frame-close-requested"
+                       : "graceful-frame-close-failed",
+                   editor_kind, close_details);
+
+            if (wxTheApp)
+                wxTheApp->ExitMainLoop();
         });
     }
 #endif
