@@ -623,6 +623,189 @@ int32_t ui_window_set_text(uint64_t handle, const char* text)
     return 1;
 }
 
+int32_t ui_text_ctrl_set_value(uint64_t handle, const char* value)
+{
+    if (!on_gui_thread() || !value)
+        return -1;
+    auto* control = dynamic_cast<wxTextCtrl*>(find_ui_window(handle));
+    if (!control)
+        return -1;
+    control->SetValue(wxString::FromUTF8(value));
+    return 1;
+}
+
+int32_t ui_text_ctrl_get_value(uint64_t handle, char* buffer, uint32_t capacity)
+{
+    if (!on_gui_thread() || !buffer || capacity == 0)
+        return -1;
+    auto* control = dynamic_cast<wxTextCtrl*>(find_ui_window(handle));
+    if (!control)
+        return -1;
+    copy_utf8_to_buffer(control->GetValue(), buffer, capacity);
+    return 1;
+}
+
+int32_t ui_check_box_set_value(uint64_t handle, int32_t checked)
+{
+    if (!on_gui_thread())
+        return -1;
+    auto* control = dynamic_cast<wxCheckBox*>(find_ui_window(handle));
+    if (!control)
+        return -1;
+    control->SetValue(checked != 0);
+    return 1;
+}
+
+int32_t ui_check_box_get_value(uint64_t handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    auto* control = dynamic_cast<wxCheckBox*>(find_ui_window(handle));
+    return control ? (control->GetValue() ? 1 : 0) : -1;
+}
+
+int32_t ui_choice_append(uint64_t handle, const char* item)
+{
+    if (!on_gui_thread() || !item)
+        return -1;
+    auto* control = dynamic_cast<wxChoice*>(find_ui_window(handle));
+    if (!control)
+        return -1;
+    return control->Append(wxString::FromUTF8(item)) == wxNOT_FOUND ? -1 : 1;
+}
+
+int32_t ui_choice_clear(uint64_t handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    auto* control = dynamic_cast<wxChoice*>(find_ui_window(handle));
+    if (!control)
+        return -1;
+    control->Clear();
+    return 1;
+}
+
+int32_t ui_choice_get_count(uint64_t handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    auto* control = dynamic_cast<wxChoice*>(find_ui_window(handle));
+    if (!control || control->GetCount() > static_cast<unsigned int>(std::numeric_limits<int32_t>::max()))
+        return -1;
+    return static_cast<int32_t>(control->GetCount());
+}
+
+int32_t ui_choice_set_selection(uint64_t handle, int32_t selection)
+{
+    if (!on_gui_thread())
+        return -1;
+    auto* control = dynamic_cast<wxChoice*>(find_ui_window(handle));
+    if (!control || selection < wxNOT_FOUND ||
+        (selection != wxNOT_FOUND && static_cast<unsigned int>(selection) >= control->GetCount()))
+        return -1;
+    control->SetSelection(selection);
+    return 1;
+}
+
+int32_t ui_choice_get_selection(uint64_t handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    auto* control = dynamic_cast<wxChoice*>(find_ui_window(handle));
+    return control ? control->GetSelection() : -1;
+}
+
+int32_t ui_choice_get_string_selection(uint64_t handle, char* buffer, uint32_t capacity)
+{
+    if (!on_gui_thread() || !buffer || capacity == 0)
+        return -1;
+    auto* control = dynamic_cast<wxChoice*>(find_ui_window(handle));
+    if (!control)
+        return -1;
+    copy_utf8_to_buffer(control->GetStringSelection(), buffer, capacity);
+    return 1;
+}
+
+int32_t ui_window_enable(uint64_t handle, int32_t enabled)
+{
+    if (!on_gui_thread())
+        return -1;
+    wxWindow* window = find_ui_window(handle);
+    if (!window)
+        return -1;
+    window->Enable(enabled != 0);
+    return 1;
+}
+
+int32_t ui_window_raise(uint64_t handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    wxWindow* window = find_ui_window(handle);
+    if (!window)
+        return -1;
+    window->Raise();
+    return 1;
+}
+
+int32_t ui_window_set_focus(uint64_t handle)
+{
+    if (!on_gui_thread())
+        return -1;
+    wxWindow* window = find_ui_window(handle);
+    if (!window)
+        return -1;
+    window->SetFocus();
+    return 1;
+}
+
+int32_t ui_window_set_size(uint64_t handle, int32_t width, int32_t height)
+{
+    if (!on_gui_thread() || width < 0 || height < 0)
+        return -1;
+    wxWindow* window = find_ui_window(handle);
+    if (!window)
+        return -1;
+    window->SetSize(wxSize(width, height));
+    return 1;
+}
+
+int32_t ui_window_get_size(uint64_t handle, int32_t* width, int32_t* height)
+{
+    if (!on_gui_thread() || !width || !height)
+        return -1;
+    wxWindow* window = find_ui_window(handle);
+    if (!window)
+        return -1;
+    const wxSize size = window->GetSize();
+    *width = size.GetWidth();
+    *height = size.GetHeight();
+    return 1;
+}
+
+int32_t ui_window_set_position(uint64_t handle, int32_t x, int32_t y)
+{
+    if (!on_gui_thread())
+        return -1;
+    wxWindow* window = find_ui_window(handle);
+    if (!window)
+        return -1;
+    window->Move(wxPoint(x, y));
+    return 1;
+}
+
+int32_t ui_window_get_position(uint64_t handle, int32_t* x, int32_t* y)
+{
+    if (!on_gui_thread() || !x || !y)
+        return -1;
+    wxWindow* window = find_ui_window(handle);
+    if (!window)
+        return -1;
+    const wxPoint position = window->GetPosition();
+    *x = position.x;
+    *y = position.y;
+    return 1;
+}
 uint64_t ui_sizer_create(uint32_t kind, int32_t orientation,
                          int32_t rows, int32_t cols, int32_t vgap, int32_t hgap)
 {
@@ -1369,6 +1552,23 @@ int32_t ui_window_show(uint64_t, int32_t) { return -1; }
 int32_t ui_window_get_children(uint64_t, uint64_t*, uint32_t) { return -1; }
 int32_t ui_window_get_class_name(uint64_t, char*, uint32_t) { return -1; }
 int32_t ui_window_set_text(uint64_t, const char*) { return -1; }
+int32_t ui_text_ctrl_set_value(uint64_t, const char*) { return -1; }
+int32_t ui_text_ctrl_get_value(uint64_t, char*, uint32_t) { return -1; }
+int32_t ui_check_box_set_value(uint64_t, int32_t) { return -1; }
+int32_t ui_check_box_get_value(uint64_t) { return -1; }
+int32_t ui_choice_append(uint64_t, const char*) { return -1; }
+int32_t ui_choice_clear(uint64_t) { return -1; }
+int32_t ui_choice_get_count(uint64_t) { return -1; }
+int32_t ui_choice_set_selection(uint64_t, int32_t) { return -1; }
+int32_t ui_choice_get_selection(uint64_t) { return -1; }
+int32_t ui_choice_get_string_selection(uint64_t, char*, uint32_t) { return -1; }
+int32_t ui_window_enable(uint64_t, int32_t) { return -1; }
+int32_t ui_window_raise(uint64_t) { return -1; }
+int32_t ui_window_set_focus(uint64_t) { return -1; }
+int32_t ui_window_set_size(uint64_t, int32_t, int32_t) { return -1; }
+int32_t ui_window_get_size(uint64_t, int32_t*, int32_t*) { return -1; }
+int32_t ui_window_set_position(uint64_t, int32_t, int32_t) { return -1; }
+int32_t ui_window_get_position(uint64_t, int32_t*, int32_t*) { return -1; }
 uint64_t ui_sizer_create(uint32_t, int32_t, int32_t, int32_t, int32_t, int32_t) { return 0; }
 int32_t ui_sizer_add(uint64_t, uint64_t, int32_t, int32_t, int32_t) { return -1; }
 int32_t ui_window_set_sizer(uint64_t, uint64_t) { return -1; }
@@ -1536,6 +1736,23 @@ KUA_HostApi make_host_api()
     host.ui_window_get_top_level_windows = &ui_window_get_top_level_windows;
     host.ui_window_observe = &ui_window_observe;
     host.ui_window_unobserve = &ui_window_unobserve;
+    host.ui_text_ctrl_set_value = &ui_text_ctrl_set_value;
+    host.ui_text_ctrl_get_value = &ui_text_ctrl_get_value;
+    host.ui_check_box_set_value = &ui_check_box_set_value;
+    host.ui_check_box_get_value = &ui_check_box_get_value;
+    host.ui_choice_append = &ui_choice_append;
+    host.ui_choice_clear = &ui_choice_clear;
+    host.ui_choice_get_count = &ui_choice_get_count;
+    host.ui_choice_set_selection = &ui_choice_set_selection;
+    host.ui_choice_get_selection = &ui_choice_get_selection;
+    host.ui_choice_get_string_selection = &ui_choice_get_string_selection;
+    host.ui_window_enable = &ui_window_enable;
+    host.ui_window_raise = &ui_window_raise;
+    host.ui_window_set_focus = &ui_window_set_focus;
+    host.ui_window_set_size = &ui_window_set_size;
+    host.ui_window_get_size = &ui_window_get_size;
+    host.ui_window_set_position = &ui_window_set_position;
+    host.ui_window_get_position = &ui_window_get_position;
     host.ui_window_get_class_name = &ui_window_get_class_name;
     host.ui_window_set_text = &ui_window_set_text;
     host.ui_sizer_create = &ui_sizer_create;

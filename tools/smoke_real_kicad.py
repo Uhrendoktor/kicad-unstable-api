@@ -59,6 +59,11 @@ def run_editor(
     environment = os.environ.copy()
     environment["KUA_SMOKE_LOG"] = str(log_file)
     environment["KICAD_ENABLE_WXTRACE"] = "1"
+    # Preserve dynamic-loader diagnostics when a real KIFACE cannot be opened.
+    # glibc writes one diagnostic file per process under LD_DEBUG_OUTPUT.
+    if os.environ.get("KUA_SMOKE_LD_DEBUG"):
+        environment["LD_DEBUG"] = "libs,files"
+        environment["LD_DEBUG_OUTPUT"] = str(output_log.with_suffix(".ld-debug"))
     command = [str(executable), *arguments]
     trace_log = output_log.with_suffix(".strace")
     strace = shutil.which("strace")

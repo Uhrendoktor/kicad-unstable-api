@@ -24,6 +24,21 @@ _Static_assert(offsetof(KUA_HostApi, ui_window_observe) >
 _Static_assert(offsetof(KUA_HostApi, ui_window_unobserve) >
                    offsetof(KUA_HostApi, ui_window_observe),
                "Window observer teardown must follow observer registration");
+_Static_assert(offsetof(KUA_HostApi, ui_text_ctrl_set_value) >
+                   offsetof(KUA_HostApi, ui_window_unobserve),
+               "Native control operations must append after window lifecycle methods");
+_Static_assert(offsetof(KUA_HostApi, ui_check_box_set_value) >
+                   offsetof(KUA_HostApi, ui_text_ctrl_get_value),
+               "Checkbox methods must follow text-control methods");
+_Static_assert(offsetof(KUA_HostApi, ui_choice_append) >
+                   offsetof(KUA_HostApi, ui_check_box_get_value),
+               "Choice methods must follow checkbox methods");
+_Static_assert(offsetof(KUA_HostApi, ui_window_enable) >
+                   offsetof(KUA_HostApi, ui_choice_get_string_selection),
+               "Common window methods must follow choice methods");
+_Static_assert(offsetof(KUA_HostApi, ui_window_get_position) >
+                   offsetof(KUA_HostApi, ui_window_set_position),
+               "Window geometry methods must remain in append-only order");
 _Static_assert(offsetof(KUA_HostApi, ui_property_grid_delete) >
                    offsetof(KUA_HostApi, ui_property_grid_get_string),
                "Property grid methods must be appended in order");
