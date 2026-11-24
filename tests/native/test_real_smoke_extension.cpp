@@ -670,7 +670,6 @@ void on_window(const KUA_EditorContext* context)
     const int32_t menu_attached = menu_item > 0
         ? g_host->ui_menu_bar_append(menu_bar, menu, "KUA Smoke")
         : -1;
-    g_shutdown_attached_menu = menu_attached > 0 ? menu : 0;
     const uint64_t shutdown_detached_menu = menu_bar
         ? g_host->ui_menu_create(frame_window) : 0;
     const int32_t shutdown_detached_item = shutdown_detached_menu
@@ -751,6 +750,9 @@ void on_window(const KUA_EditorContext* context)
     const uint64_t inserted_bar_menu = menu_bar ? g_host->ui_menu_create(frame_window) : 0;
     const int32_t menu_bar_insert = inserted_bar_menu
         ? g_host->ui_menu_bar_insert(menu_bar, 0, inserted_bar_menu, "KUA First") : -1;
+    // This menu remains attached after the later Remove-then-destroy test removes
+    // the original KUA Smoke menu from the end of the bar.
+    g_shutdown_attached_menu = menu_bar_insert > 0 ? inserted_bar_menu : 0;
     const int32_t menu_bar_count_after_insert = menu_bar_insert > 0
         ? g_host->ui_menu_bar_get_menu_count(menu_bar) : -1;
     const uint64_t first_bar_menu = menu_bar_count_after_insert > 0
