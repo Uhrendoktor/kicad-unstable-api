@@ -1255,7 +1255,7 @@ public:
             // Queue extensions after that setup, while guarding the borrowed frame
             // against destruction before the callback runs.
             wxWeakRef<wxWindow> weak_window(window);
-            window->CallAfter([weak_window, context]() {
+            window->CallAfter([this, weak_window, context]() {
                 wxWindow* live_window = weak_window.get();
                 if (!live_window || live_window->IsBeingDeleted() ||
                     !g_gui_callbacks_enabled.load(std::memory_order_acquire))
