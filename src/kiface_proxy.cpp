@@ -19,6 +19,8 @@
 #  include <wx/stattext.h>
 #  include <wx/sizer.h>
 #  include <wx/menu.h>
+#  include <wx/eventfilter.h>
+#  include <wx/event.h>
 #  include <wx/aui/aui.h>
 #  include <wx/propgrid/propgrid.h>
 #  include <wx/propgrid/advprops.h>
@@ -39,6 +41,7 @@
 #include <limits>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #if defined(_WIN32)
@@ -114,33 +117,67 @@ struct UiHandleEntry
     UiHandleKind kind{};
     void* pointer{};
     void* frame{};
+    wxWindow* owner_window{};
+};
+
+struct KuaMenuEventHandler : public wxEvtHandler
+{
+    KUA_GuiCallback callback{};
+    void* user_data{};
+
+    void on_menu(wxCommandEvent&)
+    {
+        if (callback)
+            callback(user_data);
+    }
 };
 
 struct MenuBindingEntry
 {
     wxWindow* frame{};
     int id{};
+    std::unique_ptr<KuaMenuEventHandler> handler;
+};
+
+struct WindowObserverEntry
+{
+    wxWindow* frame{};
+    KUA_UiWindowEventCallback callback{};
+    void* user_data{};
 };
 
 std::unordered_map<uint64_t, UiHandleEntry> g_ui_handles;
 std::unordered_map<uint64_t, MenuBindingEntry> g_menu_bindings;
+std::unordered_map<uint64_t, WindowObserverEntry> g_window_observers;
+std::unordered_set<wxWindow*> g_watched_ui_windows;
 uint64_t g_next_ui_handle = 1;
+bool g_window_event_filter_installed = false;
 
-uint64_t register_ui_handle(void* pointer, UiHandleKind kind, void* frame)
+bool on_gui_thread();
+void forget_ui_handles_for_frame(void* frame);
+
+uint64_t register_ui_handle(void* pointer, UiHandleKind kind, void* frame,
+                            wxWindow* owner_window = nullptr)
 {
     if (!pointer)
         return 0;
 
-    for (const auto& [handle, entry] : g_ui_handles)
+    for (auto& [handle, entry] : g_ui_handles)
     {
         if (entry.pointer == pointer && entry.kind == kind)
+        {
+            if (!entry.frame)
+                entry.frame = frame;
+            if (!entry.owner_window)
+                entry.owner_window = owner_window;
             return handle;
+        }
     }
 
     uint64_t handle = g_next_ui_handle++;
     if (handle == 0)
         handle = g_next_ui_handle++;
-    g_ui_handles.emplace(handle, UiHandleEntry{kind, pointer, frame});
+    g_ui_handles.emplace(handle, UiHandleEntry{kind, pointer, frame, owner_window});
     return handle;
 }
 
@@ -158,20 +195,93 @@ wxWindow* find_ui_window(uint64_t handle)
     return entry ? static_cast<wxWindow*>(entry->pointer) : nullptr;
 }
 
-void forget_ui_handles_for_frame(void* frame)
+void remove_menu_bindings_for_window(wxWindow* frame)
 {
-    for (auto it = g_ui_handles.begin(); it != g_ui_handles.end();)
+    if (!frame)
+        return;
+
+    for (auto it = g_menu_bindings.begin(); it != g_menu_bindings.end();)
     {
         if (it->second.frame == frame)
+        {
+            frame->Unbind(wxEVT_MENU, &KuaMenuEventHandler::on_menu,
+                          it->second.handler.get(), it->second.id, it->second.id);
+            it = g_menu_bindings.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
+void clear_window_observers_for_frame(wxWindow* frame);
+
+void invalidate_ui_window(wxWindow* window, bool destroying = false)
+{
+    if (!window)
+        return;
+
+    for (auto it = g_ui_handles.begin(); it != g_ui_handles.end();)
+    {
+        if ((it->second.kind == UiHandleKind::Window && it->second.pointer == window) ||
+            it->second.owner_window == window)
             it = g_ui_handles.erase(it);
         else
             ++it;
     }
 
-    for (auto it = g_menu_bindings.begin(); it != g_menu_bindings.end();)
+    remove_menu_bindings_for_window(window);
+    clear_window_observers_for_frame(window);
+    if (destroying)
+        g_watched_ui_windows.erase(window);
+}
+
+void install_ui_window_destroy_hook(wxWindow* window)
+{
+    if (!window || !g_watched_ui_windows.insert(window).second)
+        return;
+
+    window->Bind(wxEVT_DESTROY, [window](wxWindowDestroyEvent& event) {
+        // wxWindowDestroyEvent derives from wxCommandEvent and can propagate
+        // through parent handlers. This hook is installed on every registered
+        // window, so only invalidate the window that the event actually names;
+        // otherwise a child's destroy event would invalidate its editor parent.
+        if (event.GetWindow() != window)
+        {
+            event.Skip();
+            return;
+        }
+
+        invalidate_ui_window(window, true);
+        if (g_editor_frames.find(window) != g_editor_frames.end())
+        {
+            g_editor_frames.erase(window);
+            forget_ui_handles_for_frame(window);
+        }
+        event.Skip();
+    });
+}
+
+uint64_t register_ui_window(wxWindow* window, void* frame)
+{
+    if (!window)
+        return 0;
+    const uint64_t handle = register_ui_handle(window, UiHandleKind::Window, frame, window);
+    if (handle)
+        install_ui_window_destroy_hook(window);
+    return handle;
+}
+
+void forget_ui_handles_for_frame(void* frame)
+{
+    remove_menu_bindings_for_window(static_cast<wxWindow*>(frame));
+    clear_window_observers_for_frame(static_cast<wxWindow*>(frame));
+
+    for (auto it = g_ui_handles.begin(); it != g_ui_handles.end();)
     {
         if (it->second.frame == frame)
-            it = g_menu_bindings.erase(it);
+            it = g_ui_handles.erase(it);
         else
             ++it;
     }
@@ -182,17 +292,98 @@ void forget_ui_window_tree(wxWindow* window)
     if (!window)
         return;
 
-    for (auto it = g_ui_handles.begin(); it != g_ui_handles.end();)
+    const wxWindowList& children = window->GetChildren();
+    std::vector<wxWindow*> child_windows;
+    for (wxWindowList::compatibility_iterator node = children.GetFirst(); node; node = node->GetNext())
+        child_windows.push_back(node->GetData());
+
+    invalidate_ui_window(window);
+    for (wxWindow* child : child_windows)
+        forget_ui_window_tree(child);
+}
+
+bool window_belongs_to_editor(wxWindow* window, wxWindow* editor_frame)
+{
+    for (wxWindow* current = window; current; current = current->GetParent())
     {
-        if (it->second.kind == UiHandleKind::Window && it->second.pointer == window)
-            it = g_ui_handles.erase(it);
+        if (current == editor_frame)
+            return true;
+    }
+    return false;
+}
+
+class KuaWindowEventFilter final : public wxEventFilter
+{
+public:
+    int FilterEvent(wxEvent& event) override
+    {
+        uint32_t event_kind = 0;
+        bool destroying = false;
+
+        if (event.GetEventType() == wxEVT_SHOW)
+        {
+            auto* show_event = dynamic_cast<wxShowEvent*>(&event);
+            if (!show_event)
+                return Event_Skip;
+            event_kind = show_event->IsShown() ? KUA_UI_WINDOW_SHOWN : KUA_UI_WINDOW_HIDDEN;
+        }
+        else if (event.GetEventType() == wxEVT_DESTROY)
+        {
+            event_kind = KUA_UI_WINDOW_DESTROYING;
+            destroying = true;
+        }
+        else
+        {
+            return Event_Skip;
+        }
+
+        auto* window = dynamic_cast<wxWindow*>(event.GetEventObject());
+        if (!window || !on_gui_thread())
+            return Event_Skip;
+
+        std::vector<WindowObserverEntry> observers;
+        observers.reserve(g_window_observers.size());
+        for (const auto& [handle, observer] : g_window_observers)
+        {
+            (void)handle;
+            if (window_belongs_to_editor(window, observer.frame))
+                observers.push_back(observer);
+        }
+
+        for (const WindowObserverEntry& observer : observers)
+        {
+            const uint64_t window_handle = destroying
+                ? register_ui_handle(window, UiHandleKind::Window, observer.frame, window)
+                : register_ui_window(window, observer.frame);
+            if (observer.callback && window_handle)
+                observer.callback(window_handle, event_kind, observer.user_data);
+        }
+
+        if (destroying)
+            invalidate_ui_window(window, true);
+
+        return Event_Skip;
+    }
+};
+
+KuaWindowEventFilter g_window_event_filter;
+
+void clear_window_observers_for_frame(wxWindow* frame)
+{
+    if (!frame)
+        return;
+
+    for (auto it = g_window_observers.begin(); it != g_window_observers.end();)
+    {
+        if (it->second.frame == frame)
+            it = g_window_observers.erase(it);
         else
             ++it;
     }
 
-    const wxWindowList& children = window->GetChildren();
-    for (wxWindowList::compatibility_iterator node = children.GetFirst(); node; node = node->GetNext())
-        forget_ui_window_tree(node->GetData());
+    // Do not remove the filter from inside FilterEvent(): wxWidgets iterates
+    // the filter linked list while invoking it. With no observers it continues
+    // native handle invalidation, but emits no plugin callbacks, until shutdown.
 }
 
 void copy_utf8_to_buffer(const wxString& value, char* buffer, uint32_t capacity)
@@ -217,7 +408,7 @@ uint64_t ui_window_get_handle(void* borrowed_window)
     {
         (void)state;
         if (frame == borrowed_window)
-            return register_ui_handle(frame, UiHandleKind::Window, frame);
+            return register_ui_window(static_cast<wxWindow*>(frame), frame);
     }
 
     return 0;
@@ -273,8 +464,7 @@ uint64_t ui_window_create(uint64_t parent_handle, uint32_t kind, int32_t id,
     if (!window)
         return 0;
 
-    return register_ui_handle(window, UiHandleKind::Window,
-                              g_ui_handles[parent_handle].frame);
+    return register_ui_window(window, g_ui_handles[parent_handle].frame);
 }
 
 int32_t ui_window_destroy(uint64_t handle)
@@ -311,11 +501,67 @@ int32_t ui_window_get_children(uint64_t parent_handle, uint64_t* handles, uint32
     for (wxWindowList::compatibility_iterator node = children.GetFirst(); node; node = node->GetNext())
     {
         if (handles && static_cast<uint32_t>(count) < capacity)
-            handles[count] = register_ui_handle(node->GetData(), UiHandleKind::Window,
-                                                g_ui_handles[parent_handle].frame);
+            handles[count] = register_ui_window(node->GetData(), g_ui_handles[parent_handle].frame);
         ++count;
     }
     return count;
+}
+
+int32_t ui_window_get_top_level_windows(uint64_t editor_frame_handle,
+                                            uint64_t* handles, uint32_t capacity)
+{
+    if (!on_gui_thread())
+        return -1;
+    wxWindow* editor_frame = find_ui_window(editor_frame_handle);
+    if (!editor_frame)
+        return -1;
+
+    int32_t count = 0;
+    for (wxWindowList::compatibility_iterator node = wxTopLevelWindows.GetFirst();
+         node; node = node->GetNext())
+    {
+        wxWindow* window = node->GetData();
+        if (!window_belongs_to_editor(window, editor_frame))
+            continue;
+        if (handles && static_cast<uint32_t>(count) < capacity)
+            handles[count] = register_ui_window(window, editor_frame);
+        ++count;
+    }
+    return count;
+}
+
+uint64_t ui_window_observe(uint64_t editor_frame_handle,
+                           KUA_UiWindowEventCallback callback, void* user_data)
+{
+    if (!on_gui_thread() || !callback)
+        return 0;
+    wxWindow* frame = find_ui_window(editor_frame_handle);
+    if (!frame)
+        return 0;
+
+    uint64_t observer = g_next_ui_handle++;
+    if (observer == 0)
+        observer = g_next_ui_handle++;
+    const bool first_observer = g_window_observers.empty();
+    g_window_observers.emplace(observer, WindowObserverEntry{frame, callback, user_data});
+    if (first_observer && !g_window_event_filter_installed)
+    {
+        wxEvtHandler::AddFilter(&g_window_event_filter);
+        g_window_event_filter_installed = true;
+    }
+    return observer;
+}
+
+int32_t ui_window_unobserve(uint64_t observer)
+{
+    if (!on_gui_thread())
+        return -1;
+    const auto it = g_window_observers.find(observer);
+    if (it == g_window_observers.end())
+        return -1;
+    g_window_observers.erase(it);
+    // The filter remains installed and becomes a no-op until host shutdown.
+    return 1;
 }
 
 int32_t ui_window_get_class_name(uint64_t handle, char* buffer, uint32_t capacity)
@@ -393,6 +639,7 @@ int32_t ui_window_set_sizer(uint64_t window_handle, uint64_t sizer_handle)
         return -1;
     window->SetSizer(static_cast<wxSizer*>(entry->pointer));
     entry->frame = g_ui_handles[window_handle].frame;
+    entry->owner_window = window;
     return 1;
 }
 
@@ -474,7 +721,7 @@ uint64_t ui_menu_bar_get(uint64_t frame_handle)
     wxWindow* window = find_ui_window(frame_handle);
     auto* frame = dynamic_cast<wxFrame*>(window);
     return frame ? register_ui_handle(frame->GetMenuBar(), UiHandleKind::MenuBar,
-                                      g_ui_handles[frame_handle].frame) : 0;
+                                      g_ui_handles[frame_handle].frame, frame) : 0;
 }
 
 uint64_t ui_menu_create(uint64_t frame_handle)
@@ -482,7 +729,7 @@ uint64_t ui_menu_create(uint64_t frame_handle)
     if (!on_gui_thread() || !find_ui_window(frame_handle))
         return 0;
     return register_ui_handle(new wxMenu(), UiHandleKind::Menu,
-                              g_ui_handles[frame_handle].frame);
+                              g_ui_handles[frame_handle].frame, find_ui_window(frame_handle));
 }
 
 int32_t ui_menu_append(uint64_t menu_handle, int32_t id, const char* label,
@@ -544,11 +791,23 @@ uint64_t ui_menu_bind(uint64_t frame_handle, int32_t id, KUA_GuiCallback callbac
     wxWindow* frame = find_ui_window(frame_handle);
     if (!frame)
         return 0;
-    frame->Bind(wxEVT_MENU, [callback, user_data](wxCommandEvent&) { callback(user_data); }, id);
+
+    for (const auto& [binding, entry] : g_menu_bindings)
+    {
+        (void)binding;
+        if (entry.frame == frame && entry.id == id)
+            return 0;
+    }
+
+    auto handler = std::make_unique<KuaMenuEventHandler>();
+    handler->callback = callback;
+    handler->user_data = user_data;
+    frame->Bind(wxEVT_MENU, &KuaMenuEventHandler::on_menu, handler.get(), id, id);
+
     uint64_t binding = g_next_ui_handle++;
     if (binding == 0)
         binding = g_next_ui_handle++;
-    g_menu_bindings.emplace(binding, MenuBindingEntry{frame, id});
+    g_menu_bindings.emplace(binding, MenuBindingEntry{frame, id, std::move(handler)});
     return binding;
 }
 
@@ -559,7 +818,9 @@ int32_t ui_menu_unbind(uint64_t binding)
     const auto it = g_menu_bindings.find(binding);
     if (it == g_menu_bindings.end())
         return -1;
-    it->second.frame->Disconnect(it->second.id, it->second.id, wxEVT_MENU);
+    if (!it->second.frame->Unbind(wxEVT_MENU, &KuaMenuEventHandler::on_menu,
+                                  it->second.handler.get(), it->second.id, it->second.id))
+        return -1;
     g_menu_bindings.erase(it);
     return 1;
 }
@@ -660,7 +921,7 @@ uint64_t ui_properties_get_panel(uint64_t frame_handle)
 
     auto* frame = static_cast<EDA_DRAW_FRAME*>(window);
     PROPERTIES_PANEL* panel = frame->GetPropertiesPanel();
-    return panel ? register_ui_handle(panel, UiHandleKind::Window, frame_entry->frame) : 0;
+    return panel ? register_ui_window(panel, frame_entry->frame) : 0;
 }
 
 uint64_t ui_properties_get_grid(uint64_t panel_handle)
@@ -685,8 +946,9 @@ uint64_t ui_properties_get_grid(uint64_t panel_handle)
     auto* panel = static_cast<PROPERTIES_PANEL*>(window);
     wxPropertyGrid* grid = panel->GetPropertyGrid();
     return grid ? register_ui_handle(grid, UiHandleKind::PropertyGrid,
-                                     panel_entry->frame) : 0;
+                                     panel_entry->frame, panel) : 0;
 }
+
 
 int32_t ui_property_grid_append_string(uint64_t grid_handle, const char* label,
                                        const char* name, const char* value)
@@ -813,8 +1075,6 @@ void destroy_overlays_for_frame(void* frame)
             state.canvas->Refresh(false);
         it = g_overlays.erase(it);
     }
-    g_editor_frames.erase(frame);
-    forget_ui_handles_for_frame(frame);
 }
 
 void destroy_all_overlays()
@@ -828,6 +1088,21 @@ void destroy_all_overlays()
             state.canvas->Refresh(false);
     }
     g_overlays.clear();
+    std::unordered_set<wxWindow*> menu_frames;
+    for (const auto& [binding, entry] : g_menu_bindings)
+    {
+        (void)binding;
+        menu_frames.insert(entry.frame);
+    }
+    for (wxWindow* frame : menu_frames)
+        remove_menu_bindings_for_window(frame);
+    if (g_window_event_filter_installed)
+    {
+        wxEvtHandler::RemoveFilter(&g_window_event_filter);
+        g_window_event_filter_installed = false;
+    }
+    g_window_observers.clear();
+    g_watched_ui_windows.clear();
     g_editor_frames.clear();
     g_ui_handles.clear();
     g_menu_bindings.clear();
@@ -881,6 +1156,9 @@ int32_t overlay_line(uint64_t, double, double, double, double) { return -1; }
 int32_t overlay_circle(uint64_t, double, double, double) { return -1; }
 int32_t overlay_rectangle(uint64_t, double, double, double, double) { return -1; }
 uint64_t ui_window_get_handle(void*) { return 0; }
+int32_t ui_window_get_top_level_windows(uint64_t, uint64_t*, uint32_t) { return -1; }
+uint64_t ui_window_observe(uint64_t, KUA_UiWindowEventCallback, void*) { return 0; }
+int32_t ui_window_unobserve(uint64_t) { return -1; }
 uint64_t ui_window_create(uint64_t, uint32_t, int32_t, const char*, int32_t) { return 0; }
 int32_t ui_window_destroy(uint64_t) { return -1; }
 int32_t ui_window_show(uint64_t, int32_t) { return -1; }
@@ -1051,6 +1329,9 @@ KUA_HostApi make_host_api()
     host.ui_window_destroy = &ui_window_destroy;
     host.ui_window_show = &ui_window_show;
     host.ui_window_get_children = &ui_window_get_children;
+    host.ui_window_get_top_level_windows = &ui_window_get_top_level_windows;
+    host.ui_window_observe = &ui_window_observe;
+    host.ui_window_unobserve = &ui_window_unobserve;
     host.ui_window_get_class_name = &ui_window_get_class_name;
     host.ui_window_set_text = &ui_window_set_text;
     host.ui_sizer_create = &ui_sizer_create;
@@ -1250,7 +1531,7 @@ public:
             context.canvas = canvas;
             context.view = canvas ? canvas->GetView() : nullptr;
             g_editor_frames[window] = {canvas, static_cast<KIGFX::VIEW*>(context.view)};
-            register_ui_handle(window, UiHandleKind::Window, window);
+            register_ui_window(window, window);
             // EDA_BASE_FRAME creates its initial menu bar with CallAfter().
             // Queue extensions after that setup, while guarding the borrowed frame
             // against destruction before the callback runs.
