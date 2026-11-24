@@ -2,7 +2,7 @@ name: Native loader prototype
 
 on:
   push:
-    branches: [main, feature/native-menu-operations]
+    branches: [main]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -21,7 +21,6 @@ concurrency:
 
 jobs:
   native-loader:
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     name: ${{ matrix.os }} KIFACE proxy harness
     timeout-minutes: 5
     strategy:
@@ -43,14 +42,10 @@ jobs:
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
   # The default inner loop above is capped at five minutes and never builds KiCad.
-  # [exact-head smoke] Full editor smoke uses the official KiCad nightly binary package built from
+  # Full editor smoke uses the official KiCad nightly binary package built from
   # the exact pinned source commit. Only KUA's proxies and smoke fixture compile.
   real-kicad-linux:
-    if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.full_editor_validation) ||
-      (github.event_name == 'push' &&
-       github.ref == 'refs/heads/feature/native-menu-operations' &&
-       startsWith(github.event.head_commit.message, '[full-editor-validation]'))
+    if: github.event_name == 'workflow_dispatch' && inputs.full_editor_validation
     name: Exact-source KiCad nightly runtime and live-editor smoke
     runs-on: ubuntu-24.04
     container: ubuntu:26.04

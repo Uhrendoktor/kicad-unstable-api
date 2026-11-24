@@ -60,18 +60,26 @@ Each KUA call should map to an existing native method/event or a mechanical sequ
 | `overlay_line/circle/rectangle` | Initial GAL primitives | Implemented |
 | `KUA_EditorContext.frame/canvas/view` | Borrowed editor handles | Implemented |
 | extension lifecycle callbacks | Initialize, editor-created, reset and shutdown | Implemented |
-| `ui_window_get_top_level_windows` | Enumerate top-level windows owned by an editor frame | Implemented; live-editor acceptance pending |
-| `ui_window_observe/unobserve` | Observe native window show/hide/destroy events without consuming KiCad events | Implemented; live-editor acceptance pending |
-| native window destroy tracking | Invalidate window and owned sizer/property handles when the wxWindow is destroyed | Implemented; live-editor acceptance pending |
-| precise menu callback unbind | Remove only KUA's own `wxEVT_MENU` handler for its ID | Implemented; exact-build smoke pending |
-| menu-bar insert/list/label | Query and insert top-level menus and read/change their titles | Implemented; live-editor smoke pending |
-| menu item insert/separator/state/label | Insert normal/check/radio items, separators, enable/check them and read/write labels | Implemented; live-editor smoke pending |
-| `ui_text_ctrl_*` | Read/write native `wxTextCtrl` values | Implemented; exact-build smoke pending |
-| `ui_check_box_*` | Read/write native `wxCheckBox` state | Implemented; exact-build smoke pending |
-| `ui_choice_*` | Append/clear items, count, select and read selected text | Implemented; exact-build smoke pending |
-| `ui_window_enable/raise/set_focus` | Direct native window enable, raise and focus calls | Implemented; exact-build smoke pending |
-| `ui_window_set/get_size/position` | Read/write native window geometry | Implemented; exact-build smoke pending |
-| AUI manager owner tracking | Invalidate manager handles with `wxAuiManager::GetManagedWindow()` | Implemented; exact-build smoke pending |
+| `ui_window_get_top_level_windows` | Enumerate top-level windows owned by an editor frame | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| `ui_window_observe/unobserve` | Observe native window show/hide/destroy events without consuming KiCad events | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| native window destroy tracking | Invalidate window and owned sizer/property handles when the wxWindow is destroyed | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| precise menu callback unbind | Remove only KUA's own `wxEVT_MENU` handler for its ID | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| menu-bar insert/list/label | Query and insert top-level menus and read/change their titles | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| menu item insert/separator/state/label | Insert normal/check/radio items, separators, enable/check them and read/write labels | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| `ui_text_ctrl_*` | Read/write native `wxTextCtrl` values | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| `ui_check_box_*` | Read/write native `wxCheckBox` state | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| `ui_choice_*` | Append/clear items, count, select and read selected text | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| `ui_window_enable/raise/set_focus` | Direct native window enable, raise and focus calls | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| `ui_window_set/get_size/position` | Read/write native window geometry | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+| AUI manager owner tracking | Invalidate manager handles with `wxAuiManager::GetManagedWindow()` | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
+
+
+
+### PR #8 exact-build live-editor evidence
+
+The append-only menu-bar/menu-item binding slice was merged in [PR #8](https://github.com/Uhrendoktor/kicad-unstable-api/pull/8) at commit `73606aa16af0631f0f81114281e49186b6f5a1b3`. Exact-head fast validation [45478202553](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45478202553) passed on Ubuntu, Windows and macOS. Package-backed real-editor validation [45478187892](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45478187892) passed against KiCad nightly package `202611231147+b7066f8863~190~ubuntu26.04.1`, which matched pinned source SHA `b7066f886375b186ca8fa469de3a6382f6bba400`.
+
+Both Eeschema (`editor=1`) and PCB Editor (`editor=2`) emitted `native-ui-ready` with `menu_ops=1`, `menu_dispatch=1`, `unbind=1`, `window_ops=1`, `aui_owner_lifetime=1` and `property=1`. The diagnostic artifact is [14961087054](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45478187892/artifacts/14961087054). KiCad and GAL were not compiled in this validation: only the two KUA production proxies (~10.4 seconds) and smoke extension (~1.8 seconds) were compiled. The default three-platform PR matrix is capped at five minutes per platform and never builds KiCad.
 
 ## 3. Native windows and controls
 
