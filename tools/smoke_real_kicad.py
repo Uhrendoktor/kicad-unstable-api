@@ -69,6 +69,18 @@ def run_editor(
         environment["LD_DEBUG"] = "libs,files"
         environment["LD_DEBUG_OUTPUT"] = str(output_log.with_suffix(".ld-debug"))
     command = [str(executable), *arguments]
+    if os.environ.get("KUA_SMOKE_GDB") == "1":
+        debugger = shutil.which("gdb")
+        if not debugger:
+            raise RuntimeError("KUA_SMOKE_GDB=1 but gdb is not installed.")
+        command = [
+            debugger, "--batch", "--quiet",
+            "-ex", "set pagination off",
+            "-ex", "run",
+            "-ex", "thread apply all bt full",
+            "--args", *command,
+        ]
+
     trace_log = output_log.with_suffix(".strace")
     strace = shutil.which("strace")
     if strace:
