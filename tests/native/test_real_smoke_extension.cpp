@@ -209,6 +209,93 @@ void on_window(const KUA_EditorContext* context)
         ? g_host->ui_window_get_class_name(notebook, class_name, sizeof(class_name))
         : -1;
 
+    // Exercise every newly appended control/window operation with live native
+    // wxWidgets objects. These checks run against both real editor processes.
+    int native_controls_ok = 1;
+    int text_control_ok = 1;
+    int check_box_ok = 1;
+    int choice_control_ok = 1;
+    int common_window_ops_ok = 1;
+    const uint64_t text_ctrl = panel
+        ? g_host->ui_window_create(panel, KUA_UI_WINDOW_TEXT_CTRL, -1, "initial", 0)
+        : 0;
+    const uint64_t check_box = panel
+        ? g_host->ui_window_create(panel, KUA_UI_WINDOW_CHECK_BOX, -1, "enabled", 0)
+        : 0;
+    const uint64_t choice = panel
+        ? g_host->ui_window_create(panel, KUA_UI_WINDOW_CHOICE, -1, "", 0)
+        : 0;
+
+    char text_value[96]{};
+    const int32_t text_set = text_ctrl
+        ? g_host->ui_text_ctrl_set_value(text_ctrl, "KUA native text round-trip")
+        : -1;
+    const int32_t text_get = text_ctrl
+        ? g_host->ui_text_ctrl_get_value(text_ctrl, text_value, sizeof(text_value))
+        : -1;
+    text_control_ok = text_set > 0 && text_get > 0 &&
+                      std::strcmp(text_value, "KUA native text round-trip") == 0;
+
+    const int32_t checkbox_set_off = check_box
+        ? g_host->ui_check_box_set_value(check_box, 0) : -1;
+    const int32_t checkbox_off = check_box
+        ? g_host->ui_check_box_get_value(check_box) : -1;
+    const int32_t checkbox_set_on = check_box
+        ? g_host->ui_check_box_set_value(check_box, 7) : -1;
+    const int32_t checkbox_on = check_box
+        ? g_host->ui_check_box_get_value(check_box) : -1;
+    check_box_ok = checkbox_set_off > 0 && checkbox_off == 0 &&
+                   checkbox_set_on > 0 && checkbox_on == 1;
+
+    const int32_t choice_append_first = choice
+        ? g_host->ui_choice_append(choice, "first") : -1;
+    const int32_t choice_append_second = choice
+        ? g_host->ui_choice_append(choice, "second") : -1;
+    const int32_t choice_count = choice ? g_host->ui_choice_get_count(choice) : -1;
+    const int32_t choice_select = choice
+        ? g_host->ui_choice_set_selection(choice, 1) : -1;
+    const int32_t choice_selection = choice
+        ? g_host->ui_choice_get_selection(choice) : -1;
+    char choice_value[64]{};
+    const int32_t choice_text = choice
+        ? g_host->ui_choice_get_string_selection(choice, choice_value, sizeof(choice_value))
+        : -1;
+    const int32_t choice_clear = choice ? g_host->ui_choice_clear(choice) : -1;
+    const int32_t choice_empty_count = choice ? g_host->ui_choice_get_count(choice) : -1;
+    const int32_t choice_empty_selection = choice
+        ? g_host->ui_choice_get_selection(choice) : -2;
+    choice_control_ok = choice_append_first > 0 && choice_append_second > 0 &&
+                        choice_count == 2 && choice_select > 0 &&
+                        choice_selection == 1 && choice_text > 0 &&
+                        std::strcmp(choice_value, "second") == 0 &&
+                        choice_clear > 0 && choice_empty_count == 0 &&
+                        choice_empty_selection == -1;
+
+    const int32_t disable_window = panel ? g_host->ui_window_enable(panel, 0) : -1;
+    const int32_t enable_window = panel ? g_host->ui_window_enable(panel, 1) : -1;
+    const int32_t raise_window = panel ? g_host->ui_window_raise(panel) : -1;
+    const int32_t focus_text = text_ctrl ? g_host->ui_window_set_focus(text_ctrl) : -1;
+    const int32_t set_window_size = panel
+        ? g_host->ui_window_set_size(panel, 321, 213) : -1;
+    int32_t window_width = -1;
+    int32_t window_height = -1;
+    const int32_t get_window_size = panel
+        ? g_host->ui_window_get_size(panel, &window_width, &window_height) : -1;
+    const int32_t set_window_position = panel
+        ? g_host->ui_window_set_position(panel, 37, 41) : -1;
+    int32_t window_x = -1;
+    int32_t window_y = -1;
+    const int32_t get_window_position = panel
+        ? g_host->ui_window_get_position(panel, &window_x, &window_y) : -1;
+    common_window_ops_ok = disable_window > 0 && enable_window > 0 &&
+                           raise_window > 0 && focus_text > 0 &&
+                           set_window_size > 0 && get_window_size > 0 &&
+                           window_width == 321 && window_height == 213 &&
+                           set_window_position > 0 && get_window_position > 0 &&
+                           window_x == 37 && window_y == 41;
+    native_controls_ok = text_control_ok && check_box_ok &&
+                         choice_control_ok && common_window_ops_ok;
+
     int sizer_replacement_ok = 1;
     int sizer_owner_destroyed_ok = 1;
     int sizer_ownership_ok = 1;
@@ -458,16 +545,18 @@ void on_window(const KUA_EditorContext* context)
                                late_sizer_stale == -1;
 #endif
 
-    char ui_details[512]{};
+    char ui_details[768]{};
     std::snprintf(ui_details, sizeof(ui_details),
-                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|class=%d|sizer_replace=%d|sizer_destroy=%d|sizer_ownership=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
+                  "frame=%d|top=%d|dialog=%d|shown=%d|hidden=%d|enumerated=%d|destroy=%d|stale=%d|probe=%d|probe_destroy=%d|probe_stale=%d|destroy_event_valid=%d|destroy_event_stale=%d|observer=%d|show_events=%d|hide_events=%d|destroy_events=%d|panel=%d|panel_destroyed=%d|page=%d|count=%d|class=%d|controls=%d|text=%d|checkbox=%d|choice=%d|window_ops=%d|sizer_replace=%d|sizer_destroy=%d|sizer_ownership=%d|aui=%d|aui_owner_lifetime=%d|pane=%d|update=%d|detach=%d|menu=%d|bind=%d|menu_dispatch=%d|menu_calls=%d|unbind=%d|property=%d",
                   frame_window != 0, top_level_initial, dialog != 0, dialog_shown, dialog_hidden,
                   dialog_enumerated, dialog_destroyed, stale_dialog_handle, destroy_probe != 0,
                   destroy_probe_result, stale_destroy_probe, g_destroy_event_handle_valid,
                   expired_destroy_event_handle, window_observer_removed,
                   g_window_shown_events, g_window_hidden_events, g_window_destroying_events,
                   panel != 0, panel_destroyed, page_added, page_count, class_read,
-                  sizer_replacement_ok, sizer_owner_destroyed_ok, sizer_ownership_ok, manager != 0, aui_owner_lifetime_ok, pane_added,
+                  native_controls_ok, text_control_ok, check_box_ok, choice_control_ok,
+                  common_window_ops_ok, sizer_replacement_ok, sizer_owner_destroyed_ok,
+                  sizer_ownership_ok, manager != 0, aui_owner_lifetime_ok, pane_added,
                   aui_updated, pane_detached, menu_attached, menu_binding != 0, menu_dispatch_ok,
                   menu_callback_count, menu_unbound, property_result);
     const bool ui_ok = frame_window && top_level_initial > 0 && window_observer &&
@@ -479,6 +568,7 @@ void on_window(const KUA_EditorContext* context)
                        panel && panel_destroyed > 0 && notebook && page_added > 0 &&
                        page_count == 1 && class_read > 0 &&
                        std::string(class_name).find("wxNotebook") != std::string::npos &&
+                       native_controls_ok &&
                        sizer_replacement_ok && sizer_owner_destroyed_ok && sizer_ownership_ok &&
                        aui_owner_lifetime_ok && pane_added > 0 && aui_updated > 0 && pane_detached > 0 &&
                        menu_attached > 0 && menu_binding != 0 && menu_dispatch_ok &&
