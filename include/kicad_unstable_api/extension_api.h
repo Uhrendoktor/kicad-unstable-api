@@ -110,6 +110,33 @@ typedef struct KUA_AuiPaneOptions
     uint32_t flags;
 } KUA_AuiPaneOptions;
 
+typedef enum KUA_AuiInsertLevel
+{
+    KUA_AUI_INSERT_PANE = 0,
+    KUA_AUI_INSERT_ROW = 1,
+    KUA_AUI_INSERT_DOCK = 2
+} KUA_AuiInsertLevel;
+
+/* Value snapshot of a wxAuiPaneInfo. Does not expose a pointer into the manager's
+   internal pane array, whose references can be invalidated by docking operations. */
+typedef struct KUA_AuiPaneState
+{
+    uint32_t struct_size;
+    int32_t is_ok;
+    int32_t is_shown;
+    int32_t is_docked;
+    int32_t is_floating;
+    int32_t is_fixed;
+    int32_t is_movable;
+    int32_t is_resizable;
+    int32_t is_floatable;
+    int32_t is_dockable;
+    int32_t direction;
+    int32_t layer;
+    int32_t row;
+    int32_t position;
+} KUA_AuiPaneState;
+
 /*
  * Overlay coordinates are KiCad world coordinates (internal units), not pixels.
  * Handles are host-owned and must only be used on the editor GUI thread.
@@ -262,6 +289,20 @@ typedef struct KUA_HostApi
     int32_t (*ui_notebook_set_page_text)(uint64_t notebook, uint32_t index,
                                          const char* text);
     int32_t (*ui_notebook_delete_page)(uint64_t notebook, uint32_t index);
+
+    /* Native wxAuiManager pane lookup, insertion and perspective persistence. */
+    /* GetPane returns a value snapshot; no pointer to wxAuiPaneInfo escapes the host. */
+    int32_t (*ui_aui_get_pane_state)(uint64_t manager, uint64_t window,
+                                     KUA_AuiPaneState* state);
+    int32_t (*ui_aui_insert_pane)(uint64_t manager, uint64_t window,
+                                  uint64_t insert_location_window, uint32_t insert_level);
+    int32_t (*ui_aui_pane_show)(uint64_t manager, uint64_t window, int32_t shown);
+    /* Returns required UTF-8 byte length excluding NUL. Query with buffer=null/capacity=0.
+       If buffer is provided, it is always NUL-terminated when capacity > 0; compare the
+       returned length with capacity to detect truncation and retry with a larger buffer. */
+    int32_t (*ui_aui_save_perspective)(uint64_t manager, char* buffer, uint32_t capacity);
+    int32_t (*ui_aui_load_perspective)(uint64_t manager,
+                                       const char* perspective, int32_t update);
 } KUA_HostApi;
 
 typedef struct KUA_ExtensionApi
