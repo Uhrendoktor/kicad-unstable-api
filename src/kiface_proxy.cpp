@@ -659,8 +659,7 @@ int32_t ui_choice_append(uint64_t handle, const char* item)
     auto* control = dynamic_cast<wxChoice*>(find_ui_window(handle));
     if (!control)
         return -1;
-    control->Append(wxString::FromUTF8(item));
-    return 1;
+    return control->Append(wxString::FromUTF8(item)) == wxNOT_FOUND ? -1 : 1;
 }
 
 int32_t ui_choice_clear(uint64_t handle)
