@@ -25,6 +25,13 @@ set_target_properties(kua_test_extension PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${KUA_EXTENSION_DIR}"
     RUNTIME_OUTPUT_DIRECTORY "${KUA_EXTENSION_DIR}")
 
+# Probe module used by tools/smoke_real_kicad.py. It remains separate from
+# the synthetic test extension so a real editor can exercise its actual GAL.
+add_library(kua_real_smoke_extension MODULE tests/native/test_real_smoke_extension.cpp)
+target_include_directories(kua_real_smoke_extension PRIVATE include)
+set_target_properties(kua_real_smoke_extension PROPERTIES
+    PREFIX "" OUTPUT_NAME "kua_real_smoke_extension")
+
 foreach(editor eeschema pcbnew)
     add_library(kua_original_${editor} MODULE tests/native/original_kiface.cpp)
     target_include_directories(kua_original_${editor} PRIVATE tests/native)
@@ -60,13 +67,15 @@ target_include_directories(kua_extension_api_c_test PRIVATE include)
 
 if(MSVC)
     foreach(target kua_original_eeschema kua_original_pcbnew kua_test_extension
-                   kua_proxy_eeschema kua_proxy_pcbnew kua_proxy_test_host)
+                   kua_proxy_eeschema kua_proxy_pcbnew kua_proxy_test_host
+                   kua_real_smoke_extension)
         target_compile_options(${target} PRIVATE /W4 /permissive-)
     endforeach()
     target_compile_options(kua_extension_api_c_test PRIVATE /W4)
 else()
     foreach(target kua_original_eeschema kua_original_pcbnew kua_test_extension
-                   kua_proxy_eeschema kua_proxy_pcbnew kua_proxy_test_host)
+                   kua_proxy_eeschema kua_proxy_pcbnew kua_proxy_test_host
+                   kua_real_smoke_extension)
         target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
     endforeach()
     target_compile_options(kua_extension_api_c_test PRIVATE -Wall -Wextra -Wpedantic)
@@ -90,6 +99,12 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME python_modloader_unit
     COMMAND ${Python3_EXECUTABLE} -m unittest discover
         -s "${CMAKE_SOURCE_DIR}/tests" -p "test_modloader.py" -v)
+add_test(NAME python_real_kicad_build_tool_unit
+    COMMAND ${Python3_EXECUTABLE} -m unittest discover
+        -s "${CMAKE_SOURCE_DIR}/tests" -p "test_real_kicad_build.py" -v)
+add_test(NAME python_real_kicad_smoke_runner_unit
+    COMMAND ${Python3_EXECUTABLE} -m unittest discover
+        -s "${CMAKE_SOURCE_DIR}/tests" -p "test_real_kicad_smoke_runner.py" -v)
 add_test(NAME installed_proxy_roundtrip
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/test_installed_proxy.py"
         --proxy "$<TARGET_FILE:kua_proxy_eeschema>"
@@ -101,43 +116,6 @@ add_test(NAME installed_proxy_roundtrip
         --suffix "${KUA_KIFACE_SUFFIX}")
 set_tests_properties(installed_proxy_roundtrip PROPERTIES TIMEOUT 45)
 
-option(KUA_BUILD_REAL_KICAD_PROXIES "Build real Eeschema and PCB KIFACE proxies" OFF)
-set(KUA_KICAD_SOURCE_DIR "" CACHE PATH "Exact KiCad source checkout used by the target installation")
-set(KUA_KICAD_BUILD_DIR "" CACHE PATH "Matching configured KiCad build tree, if available")
-set(KUA_KICAD_INCLUDE_DIRS "" CACHE STRING "Semicolon-separated generated/include directories from the exact KiCad build")
-set(KUA_KICAD_LIBRARIES "" CACHE STRING "Semicolon-separated matching wxWidgets/KiCad libraries needed by the proxy")
-set(KUA_KICAD_ABI_TAG "" CACHE STRING "Required immutable source/build fingerprint for this proxy")
-set(KUA_WX_INCLUDE_DIRS "" CACHE STRING "Matching wxWidgets include directories from the KiCad build")
-if(KUA_BUILD_REAL_KICAD_PROXIES)
-    if(NOT KUA_KICAD_SOURCE_DIR OR NOT EXISTS "${KUA_KICAD_SOURCE_DIR}/include/kiway.h")
-        message(FATAL_ERROR "Set KUA_KICAD_SOURCE_DIR to the exact KiCad source checkout containing include/kiway.h.")
-    endif()
-    if(NOT KUA_KICAD_ABI_TAG)
-        message(FATAL_ERROR "Set KUA_KICAD_ABI_TAG to an immutable KiCad source/build fingerprint.")
-    endif()
-    if(NOT KUA_KICAD_LIBRARIES OR NOT KUA_WX_INCLUDE_DIRS)
-        message(FATAL_ERROR "Set KUA_KICAD_LIBRARIES and KUA_WX_INCLUDE_DIRS from the matching KiCad build; do not silently use system wxWidgets.")
-    endif()
-    list(APPEND KUA_KICAD_INCLUDE_DIRS
-        "${KUA_KICAD_SOURCE_DIR}/include"
-        "${KUA_KICAD_SOURCE_DIR}/libs/kimath/include")
-    if(KUA_KICAD_BUILD_DIR)
-        list(APPEND KUA_KICAD_INCLUDE_DIRS "${KUA_KICAD_BUILD_DIR}/include")
-    endif()
-    foreach(editor eeschema pcbnew)
-        add_library(kua_real_proxy_${editor} MODULE src/kiface_proxy.cpp)
-        target_include_directories(kua_real_proxy_${editor} PRIVATE
-            include ${KUA_KICAD_INCLUDE_DIRS} ${KUA_WX_INCLUDE_DIRS})
-        target_compile_definitions(kua_real_proxy_${editor} PRIVATE
-            KUA_KICAD_ABI_TAG="${KUA_KICAD_ABI_TAG}")
-        if(editor STREQUAL "pcbnew")
-            target_compile_definitions(kua_real_proxy_${editor} PRIVATE KUA_BUILD_EDITOR_PCB)
-        else()
-            target_compile_definitions(kua_real_proxy_${editor} PRIVATE KUA_BUILD_EDITOR_SCHEMATIC)
-        endif()
-        target_link_libraries(kua_real_proxy_${editor} PRIVATE
-            ${KUA_KICAD_LIBRARIES} ${CMAKE_DL_LIBS})
-        set_target_properties(kua_real_proxy_${editor} PROPERTIES
-            PREFIX "" OUTPUT_NAME "_${editor}" SUFFIX "${KUA_KIFACE_SUFFIX}")
-    endforeach()
-endif()
+# Production proxies are compiled with tools/build_real_kicad_proxy.py using the
+# exact KiCad build's compile_commands.json, so generated headers, wxWidgets
+# configuration, target definitions and include paths are reused.

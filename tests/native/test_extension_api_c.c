@@ -9,6 +9,15 @@ _Static_assert(sizeof(((KUA_HostApi*) 0)->abi_version) == sizeof(uint32_t),
 _Static_assert(offsetof(KUA_HostApi, overlay_create) >
                    offsetof(KUA_HostApi, post_to_gui),
                "Overlay functions must remain appended to the host API");
+_Static_assert(offsetof(KUA_HostApi, ui_window_create) >
+                   offsetof(KUA_HostApi, overlay_rectangle),
+               "Native UI bindings must be appended after overlay calls");
+_Static_assert(offsetof(KUA_HostApi, ui_aui_add_pane) >
+                   offsetof(KUA_HostApi, ui_menu_unbind),
+               "AUI operations must follow menu operations");
+_Static_assert(offsetof(KUA_HostApi, ui_property_grid_delete) >
+                   offsetof(KUA_HostApi, ui_property_grid_get_string),
+               "Property grid methods must be appended in order");
 _Static_assert(offsetof(KUA_ExtensionApi, shutdown) >
                    offsetof(KUA_ExtensionApi, on_editor_reset),
                "Extension lifecycle fields are out of order");

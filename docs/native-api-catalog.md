@@ -1,6 +1,6 @@
 # Native API capability catalogue
 
-This catalogue maps the public/in-process facilities needed by KiCad Blocks, JLCPCB Interface and kicad-clippy. The inspected source baseline is documented in [research.md](research.md). Exact headers, exported symbols and object layout must be checked against each supported KiCad build.
+This summary maps the public/in-process facilities needed by KiCad Blocks, JLCPCB Interface and kicad-clippy. The full proposed C API call catalogue, native window/window-group API, docking API, native wxWindow/menu/AUI/notebook/property-grid binding catalogue, object model and priority matrix are in [api-capability-catalog.md](api-capability-catalog.md). Native source baseline for this summary: KiCad b7066f886375b186ca8fa469de3a6382f6bba400. Exact headers, exported symbols and object layout must be checked against each supported KiCad build.
 
 ## The loader gives process access, not universal symbol access
 
@@ -39,10 +39,10 @@ For the required input modes:
 PCB Editor's `VIEW` layer-target/display-only configuration must be verified separately. Do not assume that Eeschema's setup automatically applies to PCB.
 
 Sources:
-- https://github.com/KiCad/kicad-source-mirror/blob/2313f118a23a3e3bf4fd04e3625f190f4531a02d/include/view/view.h
-- https://github.com/KiCad/kicad-source-mirror/blob/2313f118a23a3e3bf4fd04e3625f190f4531a02d/include/view/view_overlay.h
-- https://github.com/KiCad/kicad-source-mirror/blob/2313f118a23a3e3bf4fd04e3625f190f4531a02d/common/view/view.cpp
-- https://github.com/KiCad/kicad-source-mirror/blob/2313f118a23a3e3bf4fd04e3625f190f4531a02d/eeschema/sch_draw_panel.cpp
+- https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/include/view/view.h
+- https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/include/view/view_overlay.h
+- https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/common/view/view.cpp
+- https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/eeschema/sch_draw_panel.cpp
 
 ## Editor and document model
 
@@ -76,31 +76,22 @@ The intended exact-symbol placement sequence is:
 This is the required native route for Blocks and JLCPCB Add mode. It is not the same as launching the ordinary Add Symbol picker. The existing `Board.interactive_move()` IPC operation is a precedent for asynchronous PCB placement; Eeschema does not currently expose the same operation through its IPC schema. A native in-process extension may be able to invoke the existing move action directly, but the full create/selection/commit handoff must be proven in a real Eeschema GUI test.
 
 Sources:
-- https://github.com/KiCad/kicad-source-mirror/blob/2313f118a23a3e3bf4fd04e3625f190f4531a02d/include/tool/tool_manager.h
-- https://github.com/KiCad/kicad-source-mirror/blob/2313f118a23a3e3bf4fd04e3625f190f4531a02d/eeschema/sch_commit.h
-- https://github.com/KiCad/kicad-source-mirror/blob/2313f118a23a3e3bf4fd04e3625f190f4531a02d/eeschema/tools/sch_actions.h
+- https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/include/tool/tool_manager.h
+- https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/eeschema/sch_commit.h
+- https://github.com/KiCad/kicad-source-mirror/blob/b7066f886375b186ca8fa469de3a6382f6bba400/eeschema/tools/sch_actions.h
 - https://github.com/Uhrendoktor/kicad-blocks/blob/main/docs/upstream/kicad-schematic-interactive-move-proposal.md
 
-## Dockable windows and shared property tabs
+## Native UI bindings: windows, menus, docking and properties
 
-Both Eeschema and PCB Editor use a wxAuiManager-backed frame layout. Eeschema adds a native `SCH_PROPERTIES_PANEL`; PCB Editor adds a `PCB_PROPERTIES_PANEL`. Both derive from `PROPERTIES_PANEL`, which is a wxPanel containing one wxPropertyGrid and selection-aware property rebuilding. It has no public `AddPage`/provider registry.
+Plugins create and own their native windows, controls, menu entries, notebook pages and AUI panes. KUA exposes existing wxWidgets/KiCad methods; it does not create a common workspace or decide plugin UI.
 
-Therefore:
-- A private extension can create one native wxPanel/workspace and add it to the editor's existing AUI manager.
-- The shared Clippy workspace should contain a wxAuiNotebook/tab host.
-- Extension providers register a page ID, title, selected-object applicability predicate and page factory.
-- The single host manages docking, theme, selection context, tab visibility and lifetime.
-- kicad-blocks registers Library/Instance/Layout; JLCPCB registers Catalogue/Symbol/Footprint/3D; kicad-clippy registers Findings/Explanation/Fix/Component Intent.
-- Pages receive a typed selected-object context and use IPC/Rust services for long-running work.
+- **Windows:** wxWindow/wxDialog/wxFrame creation, parenting/ownership, visibility, focus, geometry, child traversal/class inspection, events and wxSizer layout.
+- **Menus:** wxFrame::GetMenuBar and wxMenuBar/wxMenu Append/Insert/Remove/Replace, submenu, enable/check/label and event binding.
+- **Docking:** wxAuiManager::GetManager/GetPane/AddPane/InsertPane/DetachPane/Update/SavePerspective/LoadPerspective and wxAuiPaneInfo.
+- **Notebook pages:** child traversal plus wxNotebook AddPage/InsertPage/RemovePage/DeletePage/GetPageCount/SetSelection.
+- **Side Properties:** EDA_DRAW_FRAME::GetPropertiesPanel and PROPERTIES_PANEL::GetPropertyGrid; wxPropertyGrid Append/Insert/Delete/Clear/value/attribute/event operations.
 
-A sibling/tabified pane alongside KiCad's current Properties pane is the realistic first implementation. Adding a tab *inside* the existing native `SCH_PROPERTIES_PANEL` or `PCB_PROPERTIES_PANEL` would require modifying or deeply adapting their private implementation: the base panel is a single property grid, not an extensible tab container. The prototype should not claim a built-in properties-page registration API.
-
-Sources:
-- https://github.com/KiCad/kicad-source-mirror/blob/2313f118a23a3e3bf4fd04e3625f190f4531a02d/common/widgets/properties_panel.h
-- https://github.com/KiCad/kicad-source-mirror/blob/2313f118a23a3e3bf4fd04e3625f190f4531a02d/eeschema/widgets/sch_properties_panel.h
-- https://github.com/KiCad/kicad-source-mirror/blob/2313f118a23a3e3bf4fd04e3625f190f4531a02d/pcbnew/widgets/pcb_properties_panel.h
-- https://github.com/KiCad/kicad-source-mirror/blob/2313f118a23a3e3bf4fd04e3625f190f4531a02d/eeschema/sch_edit_frame.cpp
-- https://github.com/KiCad/kicad-source-mirror/blob/2313f118a23a3e3bf4fd04e3625f190f4531a02d/pcbnew/pcb_edit_frame.cpp
+The modal Eeschema Symbol Properties and PCB Footprint Properties dialogs each contain a wxNotebook child that can accept a plugin-owned page. The persistent side Properties panel is a single wxPropertyGrid, not a notebook. See [api-capability-catalog.md](api-capability-catalog.md) for detailed calls and source evidence.
 
 ## Other shared native services
 
@@ -111,13 +102,15 @@ Sources:
 | Selection | Editor's selection tool and KIID/UUID mapping; sheet path is part of schematic identity |
 | Navigation | Native focus/cross-probe helpers, then selection |
 | Tool registration | Existing TOOL_MANAGER/ACTION_MANAGER per editor |
-| Docking | wxAuiManager + one shared workspace pane |
-| Context properties | Shared provider tabs; write KiCad fields/custom properties using commits |
+| Docking | Native wxAuiManager methods; plugin owns pane/window |
+| Properties | Native wxPropertyGrid rows and wxNotebook pages; plugin owns values/pages |
 | Project configuration | KiCad project/settings APIs and project-local profile files |
-| Fixes | SCH_COMMIT/BOARD_COMMIT, native operations, commit/rollback/re-run checks |
+| Native edit primitives | Existing SCH_COMMIT/BOARD_COMMIT calls; plugin chooses transaction and validation logic |
 | DRC/ ERC | Existing native engines and IPC/CLI reports; do not duplicate KiCad's validators |
 
 ## Project-by-project native UI mapping
+
+The following lists describe UI each plugin owns and creates itself using KUA's native wxWidgets/KiCad bindings; they are not host-owned pages or workflows.
 
 ### kicad-blocks
 - Blocks Library panel: searchable reusable block/implementation list.
@@ -141,6 +134,12 @@ Sources:
 - Fix tabs: preview edits, apply via native commits, verify by reparsing and rerunning ERC/DRC/rules.
 - Component-intent property page: typed roles, decoupling relationship (root IC/pin, target and return terminals/nets, constraints), test point and connector roles.
 
+
+## Native windows and editor grouping
+
+The current Python/Tk companion plugins cannot reliably establish native ownership across process boundaries. The host should create wxWidgets dialogs and modeless tool windows inside KiCad and parent them to the invoking editor. This allows the platform adapter to establish normal owner/transient grouping, focus, activation and close lifetime. See the complete method catalogue in [api-capability-catalog.md](api-capability-catalog.md).
+
+Expose existing wxDialog/wxFrame/wxWindow create/parent/show/hide/raise/focus/close/event methods and native file dialogs. A plugin creates and manages its own dialogs and child controls; for docking, the plugin adds its own window to the existing AUI manager. Do not reparent a window in another process or guess native window IDs.
 
 ## Current frame context handles
 

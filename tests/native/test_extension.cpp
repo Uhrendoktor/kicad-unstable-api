@@ -22,14 +22,30 @@ int initialize(const KUA_HostApi* host)
         !host->post_to_gui || host->struct_size < sizeof(KUA_HostApi) ||
         !host->overlay_create || !host->overlay_destroy || !host->overlay_clear ||
         !host->overlay_set_style || !host->overlay_line || !host->overlay_circle ||
-        !host->overlay_rectangle)
+        !host->overlay_rectangle || !host->ui_window_get_handle || !host->ui_window_create ||
+        !host->ui_window_destroy || !host->ui_window_get_children ||
+        !host->ui_notebook_add_page || !host->ui_menu_bar_get || !host->ui_menu_create ||
+        !host->ui_aui_get_manager || !host->ui_aui_add_pane ||
+        !host->ui_properties_get_panel || !host->ui_properties_get_grid ||
+        !host->ui_property_grid_append_string || !host->ui_property_grid_delete)
         return 0;
     if (host->overlay_create(nullptr, nullptr, nullptr) != 0 ||
         host->overlay_destroy(0) != -1 || host->overlay_clear(0) != -1 ||
         host->overlay_set_style(0, 0,0,0,1, 0,0,0,1, 1, 1,0) != -1 ||
         host->overlay_line(0, 0,0,1,1) != -1 ||
         host->overlay_circle(0, 0,0,1) != -1 ||
-        host->overlay_rectangle(0, 0,0,1,1) != -1)
+        host->overlay_rectangle(0, 0,0,1,1) != -1 ||
+        host->ui_window_get_handle(nullptr) != 0 ||
+        host->ui_window_create(0, KUA_UI_WINDOW_PANEL, -1, "", 0) != 0 ||
+        host->ui_window_destroy(0) != -1 ||
+        host->ui_window_get_children(0, nullptr, 0) != -1 ||
+        host->ui_notebook_add_page(0, 0, "", 0) != -1 ||
+        host->ui_menu_create(0) != 0 ||
+        host->ui_aui_get_manager(0) != 0 ||
+        host->ui_aui_add_pane(0, 0, nullptr) != -1 ||
+        host->ui_properties_get_panel(0) != 0 ||
+        host->ui_properties_get_grid(0) != 0 ||
+        host->ui_property_grid_append_string(0, "", "", "") != -1)
         return 0;
     metrics[OverlayApi] = 1;
     metrics[EditorKind] = static_cast<int>(host->editor_kind);

@@ -65,4 +65,6 @@ The synthetic test harness builds fake original KIFACE modules and proxies for b
 - Python install/restore of both editor proxies against a temporary fake KiCad plugin directory;
 - loading both installed proxies and restoring byte-identical originals.
 
-This does not validate compatibility with official KiCad binaries, real editor C++ objects, GAL rendering, event routing, macOS Gatekeeper, or Windows vendor signature-verification builds.
+A separate Linux CI job configures the pinned KiCad source/build, compiles both production KIFACE proxies against real generated editor compile flags, builds the matching Eeschema and PCB Editor executables, and runs the reversible Xvfb smoke. Run [45190113894](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45190113894) passed: both editors entered the proxy, initialized the extension, supplied non-null frame/canvas/view handles, and completed GAL overlay creation/style/geometry calls. The runner restored each original KIFACE module. Proxy binaries and diagnostics are retained as a seven-day artifact. The live smoke proves API calls, not pixel-level rendering or mouse pass-through.
+
+The live smoke does not provide pixel-level GAL rendering or event pass-through proof. macOS Gatekeeper and Windows vendor signature-verification builds remain untested.

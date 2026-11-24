@@ -115,22 +115,26 @@ The native Clippy adapter should hand a newly created symbol and its active comm
 The exact action lookup, commit handoff and editor busy/transaction semantics must be verified against the target KiCad build. kicad-blocks has a detailed proposal for the missing Eeschema IPC analogue:
 - https://github.com/Uhrendoktor/kicad-blocks/blob/main/docs/upstream/kicad-schematic-interactive-move-proposal.md
 
-### Dockable panels
+### Native windows, menus and docking
 
-EDA_BASE_FRAME owns the editor's wxAuiManager. PCB's edit frame exposes GetAuiManager(); the base frame has an AUI manager member. wxAuiManager can also be queried from managed windows. A native integration can host a single Clippy workspace pane and register pages from Blocks, JLCPCB and Clippy.
+Expose existing wxWidgets calls through IPC:
+- wxWindow/wxDialog/wxFrame creation, parent/owner, child enumeration, state, event binding and sizers;
+- wxMenuBar/wxMenu Append/Insert/Remove and command events;
+- wxAuiManager::GetManager/GetPane/AddPane/InsertPane/DetachPane/Update/SavePerspective/LoadPerspective;
+- wxNotebook AddPage/InsertPage/RemovePage and selection methods;
+- wxPropertyGrid methods on the editor's existing Properties panel.
 
-This is not the same as adding a tab inside KiCad's existing Symbol Properties dialog. No general third-party property-page registration API was found. The practical first implementation is a shared dockable inspector/workspace with tab providers, plus an object-selection context passed to each provider.
+wxWidgets `wxAuiManager::GetManager(wxWindow*)` accepts the managed frame or any child/grandchild. The pinned KiCad source uses it from a child pane, so no Eeschema-specific getter is needed. Plugins create and own their windows, menu entries, AUI panes and page contents.
 
-### Contextual property tabs
+### Native Properties insertion points
 
-Implement a provider registry:
-- one shared native pane/tab strip;
-- pages registered by plugin ID;
-- selected-item context containing editor kind, document identity, item UUID, sheet path or board reference;
-- provider lifecycle callbacks when the selection changes;
-- plugin-owned controls and validation, but shared layout, tab navigation, theme, docking and focus behavior.
+The persistent side panel exposes `EDA_DRAW_FRAME::GetPropertiesPanel()` and `PROPERTIES_PANEL::GetPropertyGrid()`; bind native wxPropertyGrid row/category/value/event operations.
 
-This accommodates component intent, supplier metadata, block instance configuration and lint remediation without each plugin building a separate top-level window.
+The modal Eeschema Symbol Properties dialog has protected `wxNotebook* m_notebook1` in `DIALOG_SYMBOL_PROPERTIES_BASE`; the PCB Footprint Properties dialog has protected `wxNotebook* m_NoteBook` in `DIALOG_FOOTPRINT_PROPERTIES_BASE`. Both notebooks are normal wxWindow children. A plugin can enumerate descendants, locate the correct notebook by dialog class/page labels, and call AddPage/InsertPage with its own wxPanel. Plugin code persists its own values through native object/commit calls; the built-in dialog does not automatically transfer plugin page values.
+
+### Plugin-owned native UI
+
+Each plugin builds its own windows, panels, menus, AUI panes, notebook pages and property rows using the generic KUA bindings. KUA only exposes native operations.
 
 ## 6. Platform-specific loader facts
 
