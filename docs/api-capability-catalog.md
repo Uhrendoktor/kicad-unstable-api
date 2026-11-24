@@ -1,19 +1,21 @@
-# Native KiCad IPC / binding catalogue
+# Native KiCad binding catalogue
 
 ## Scope and boundary
 
-KUA extends KiCad's IPC surface with calls to existing native KiCad and wxWidgets behavior. It does not implement Blocks, JLCPCB or Clippy features, workflows, business logic, metadata schemas or plugin UI.
+The current prototype exposes existing KiCad and wxWidgets behavior through `KUA_HostApi`, an in-process C ABI consumed by native extension modules loaded into KiCad. It does not implement an external IPC/RPC server/client or wire transport. This catalogue describes the native binding surface; an eventual out-of-process transport and typed conversion layer are separate future work.
+
+KUA does not implement Blocks, JLCPCB or Clippy features, workflows, business logic, metadata schemas or plugin UI.
 
 ```
-Plugin (Blocks / JLCPCB / Clippy)
+Native extension module (inside KiCad)
   owns: windows, layout, pages, menus, panes, metadata, workflows,
         persistence, event interpretation and business logic
              |
-             | IPC calls/events + opaque native handles
+             | KUA_HostApi calls + opaque native handles (in process)
              v
-KUA bindings
-  owns: transport, conversion, validation, handle lifetime,
-        GUI-thread dispatch and version-specific native dispatch
+KUA native bindings
+  owns: ABI validation, handle lifetime, GUI-thread dispatch,
+        conversion at the native boundary and version-specific invocation
              |
              v
 Existing KiCad / wxWidgets
@@ -30,13 +32,13 @@ Each KUA call should map to an existing native method/event or a mechanical sequ
 |---|---|
 | Implemented | Present in this prototype and exercised by tests/live smoke. |
 | Native behavior exists | KiCad/wxWidgets implements it; KUA needs a binding. |
-| Binding gap | Existing behavior is not yet reachable through the exposed IPC surface. |
+| Binding gap | Existing behavior is not yet reachable through the exposed native extension ABI. |
 | Native extension point absent | No corresponding native container/hook exists in the inspected target. |
 | Unverified | Needs exact-build or real-editor testing. |
 
 ## 1. Binding requirements
 
-- Use a C-compatible/versioned IPC contract with opaque native handles and fixed-width values.
+- The current native extension boundary is a C-compatible/versioned in-process ABI with opaque native handles and fixed-width values. Any future IPC/RPC wire contract must be separately versioned and must not expose pointers or native object layout.
 - Never expose raw C++ pointer values or native object layout to external clients.
 - Bind handles to editor/document generation; reject after close/reload/project switch.
 - Schematic identity includes document, sheet-instance path and item UUID/KIID. PCB identity includes board/document and UUID/KIID.
@@ -97,6 +99,8 @@ A plugin-owned dialog should use the invoking KiCad editor frame as its wxWidget
 - `UI.Sizer.Add/Insert(sizer, window_or_sizer, proportion, flags, border)`
 - `UI.Sizer.Detach(sizer, window_or_sizer)`
 - `UI.Window.SetSizer(window, sizer)`, `UI.Window.Layout(window)`, `UI.Window.Fit(window)`
+
+KUA tracks ownership recursively through nested sizers. Replacing a window's root sizer invalidates all registered handles in the old tree before wxWidgets deletes it; destroying the owning window invalidates the root and nested sizer handles. A registered sizer cannot be attached to more than one owner.
 
 Expose common native control methods such as text get/set, button label/enabled, choice items/selection, checkbox value, list/tree items, grid cells and event binding as thin wrappers around wxWidgets.
 
@@ -220,7 +224,7 @@ Selection/navigation:
 - `Editor.FocusItems/ZoomToItems/ZoomToBounds`
 - `Editor.CrossProbeToSchematic/CrossProbeToBoard/HighlightNet/ClearHighlight`
 
-Preserve schematic sheet paths and PCB board identity. Do not add a second domain object model beyond typed IPC wrappers.
+Preserve schematic sheet paths and PCB board identity. Do not add a second domain object model beyond typed native-extension wrappers.
 
 ## 9. Native tools, placement and transactions
 
@@ -273,7 +277,8 @@ Do not implement JLCPCB catalogue services, Clippy rules/diagnostics or Blocks l
 | Pane names/configuration and perspective persistence | Each plugin |
 | Menu items, labels, ordering and callbacks | Each plugin |
 | Property rows/pages, validation and persistence | Each plugin |
-| IPC transport, native handle safety, GUI dispatch and native method invocation | KUA |
+| In-process native extension ABI, native handle safety, GUI dispatch and native method invocation | KUA prototype |
+| External IPC/RPC server/client transport and wire conversion | Not implemented |
 
 ## 13. Implementation sequence
 
