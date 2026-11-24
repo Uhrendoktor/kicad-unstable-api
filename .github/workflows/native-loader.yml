@@ -171,7 +171,7 @@ jobs:
 
       # The native smoke also covers detached/attached KUA menu cleanup on
       # destruction of an editor-owned child frame.
-      - name: Run real Eeschema and PCB Editor GAL smoke test
+      - name: Run real Eeschema and PCB Editor GAL smoke with graceful KIFACE shutdown
         env:
           KUA_SMOKE_LD_DEBUG: "1"
         run: |
@@ -183,9 +183,11 @@ jobs:
             --eeschema "$KUA_EESCHEMA_BIN" \
             --pcbnew "$KUA_PCBNEW_BIN" \
             --diagnostics-dir build/real-kicad-diagnostics \
-            --timeout 180
+            --timeout 180 \
+            --graceful-exit \
+            --shutdown-timeout 45
 
-      - name: Require explicit menu_ops=1 in both editor diagnostics
+      - name: Require menu operations and graceful KIFACE shutdown in both editor diagnostics
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -202,9 +204,21 @@ jobs:
                           if line.startswith(prefix)]
               if not matching:
                   raise SystemExit(f"{editor} did not record {prefix}")
-              if not any(re.search(r"(?:^|\|)menu_ops=1(?:\||$)", line) for line in matching):
-                  raise SystemExit(f"{editor} native-ui-ready record lacks menu_ops=1")
+              for field in ("menu_ops=1", "menu_owner_destroy=1", "menu_lifetime=1"):
+                  if not any(re.search(rf"(?:^|\|){re.escape(field)}(?:\||$)", line)
+                             for line in matching):
+                      raise SystemExit(f"{editor} native-ui-ready record lacks {field}")
+              shutdown_path = Path("build/real-kicad-diagnostics") / f"{editor}-extension.log"
+              editor_kind = 1 if editor == "eeschema" else 2
+              shutdown_lines = [line for line in shutdown_path.read_text(errors="replace").splitlines()
+                                if line.startswith(f"shutdown|editor={editor_kind}|")]
+              if not shutdown_lines:
+                  raise SystemExit(f"{editor} did not call the extension shutdown callback")
+              if not all(token in shutdown_lines[-1]
+                         for token in ("attached_stale=-1", "detached_stale=-1")):
+                  raise SystemExit(f"{editor} shutdown callback did not observe both menu handles stale")
               print(f"PASS {editor}: {matching[-1]}")
+              print(f"PASS {editor} graceful KIFACE shutdown: {shutdown_lines[-1]}")
           PY
 
       - name: Report versions and compile timings
