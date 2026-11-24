@@ -209,15 +209,19 @@ typedef struct KUA_HostApi
     /* Text getters write UTF-8, NUL-terminated when capacity > 0; success is 1, failure -1. */
     int32_t (*ui_text_ctrl_set_value)(uint64_t text_ctrl, const char* value);
     int32_t (*ui_text_ctrl_get_value)(uint64_t text_ctrl, char* buffer, uint32_t capacity);
+    /* Checkbox setter treats zero as unchecked and any nonzero value as checked. */
     /* Checkbox getter returns 0/1, or -1 for a stale/wrong-type handle. */
     int32_t (*ui_check_box_set_value)(uint64_t check_box, int32_t checked);
     int32_t (*ui_check_box_get_value)(uint64_t check_box);
+    /* Choice append/clear return 1 on success and -1 on failure. */
     int32_t (*ui_choice_append)(uint64_t choice, const char* item);
     int32_t (*ui_choice_clear)(uint64_t choice);
     int32_t (*ui_choice_get_count)(uint64_t choice);
     /* Choice selection accepts -1 (wxNOT_FOUND) to clear the current selection. */
     int32_t (*ui_choice_set_selection)(uint64_t choice, int32_t selection);
+    /* Returns selected index; -1 means no selection or an invalid handle/type. */
     int32_t (*ui_choice_get_selection)(uint64_t choice);
+    /* Writes UTF-8 and NUL-terminates; no selection produces an empty string. */
     int32_t (*ui_choice_get_string_selection)(uint64_t choice,
                                               char* buffer, uint32_t capacity);
     /* Common window operations return 1 for a valid handle, -1 on failure. */
