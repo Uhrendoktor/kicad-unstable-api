@@ -126,8 +126,8 @@ def run_editor(
                             line for line in final_content.splitlines()
                             if line.startswith(shutdown_prefix)
                         ]
-                        close_record = f"graceful-frame-close-requested|editor={editor_kind}|"
-                        if exit_code == 0 and close_record in final_content and shutdown_lines and all(
+                        destroy_record = f"graceful-windows-destroy-requested|editor={editor_kind}|"
+                        if exit_code == 0 and destroy_record in final_content and shutdown_lines and all(
                             token in shutdown_lines[-1]
                             for token in ("attached_stale=-1", "detached_stale=-1")
                         ):
@@ -139,7 +139,7 @@ def run_editor(
 
                         failure = (
                             f"{name} graceful shutdown failed: exit_code={exit_code}; "
-                            f"frame_close_record={close_record in final_content}; "
+                            f"windows_destroy_record={destroy_record in final_content}; "
                             f"shutdown_record={shutdown_lines[-1] if shutdown_lines else '<missing>'}."
                         )
                         break
