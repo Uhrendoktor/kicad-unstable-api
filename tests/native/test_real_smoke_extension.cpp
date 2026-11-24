@@ -22,6 +22,9 @@ int g_window_hidden_events = 0;
 int g_window_destroying_events = 0;
 int g_destroy_event_handle_valid = 0;
 uint64_t g_last_destroy_event_handle = 0;
+uint64_t g_managed_aui_panel_handle = 0;
+uint64_t g_managed_aui_manager_handle = 0;
+int g_aui_manager_destroy_callback_result = 0;
 
 #if defined(KUA_SMOKE_WITH_WX)
 class KuaSmokeManagedAuiPanel final : public wxPanel
@@ -54,6 +57,15 @@ void on_native_window_event(uint64_t window, uint32_t event_kind, void*)
         if (g_host && g_host->ui_window_get_class_name &&
             g_host->ui_window_get_class_name(window, class_name, sizeof(class_name)) > 0)
             ++g_destroy_event_handle_valid;
+
+        if (window == g_managed_aui_panel_handle && g_managed_aui_manager_handle &&
+            g_host && g_host->ui_aui_update)
+        {
+            // The manager is a derived-window member, so its handle must
+            // already be stale by the time wxWindow emits DESTROY.
+            g_aui_manager_destroy_callback_result =
+                g_host->ui_aui_update(g_managed_aui_manager_handle) == -1 ? 1 : -1;
+        }
     }
 }
 
@@ -379,13 +391,20 @@ void on_window(const KUA_EditorContext* context)
     const int32_t managed_manager_before_destroy = managed_manager
         ? g_host->ui_aui_update(managed_manager)
         : -1;
+    g_managed_aui_panel_handle = managed_panel_handle;
+    g_managed_aui_manager_handle = managed_manager;
+    g_aui_manager_destroy_callback_result = 0;
     const bool managed_panel_destroyed = managed_panel && managed_panel->Destroy();
     const int32_t managed_manager_after_destroy = managed_manager
         ? g_host->ui_aui_update(managed_manager)
         : -2;
     aui_owner_lifetime_ok = managed_panel_handle && managed_manager &&
                             managed_manager_before_destroy > 0 &&
-                            managed_panel_destroyed && managed_manager_after_destroy == -1;
+                            managed_panel_destroyed &&
+                            g_aui_manager_destroy_callback_result == 1 &&
+                            managed_manager_after_destroy == -1;
+    g_managed_aui_panel_handle = 0;
+    g_managed_aui_manager_handle = 0;
 #endif
 
     const uint64_t menu_bar = frame_window ? g_host->ui_menu_bar_get(frame_window) : 0;
