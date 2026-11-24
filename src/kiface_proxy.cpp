@@ -7,6 +7,7 @@
 #  include <eda_draw_frame.h>
 #  include <wx/app.h>
 #  include <wx/thread.h>
+#  include <wx/weakref.h>
 #  include <wx/dialog.h>
 #  include <wx/frame.h>
 #  include <wx/panel.h>
@@ -1250,8 +1251,29 @@ public:
             context.view = canvas ? canvas->GetView() : nullptr;
             g_editor_frames[window] = {canvas, static_cast<KIGFX::VIEW*>(context.view)};
             register_ui_handle(window, UiHandleKind::Window, window);
-#endif
+            // EDA_BASE_FRAME creates its initial menu bar with CallAfter().
+            // Queue extensions after that setup, while guarding the borrowed frame
+            // against destruction before the callback runs.
+            wxWeakRef<wxWindow> weak_window(window);
+            window->CallAfter([weak_window, context]() {
+                wxWindow* live_window = weak_window.get();
+                if (!live_window || live_window->IsBeingDeleted() ||
+                    !g_gui_callbacks_enabled.load(std::memory_order_acquire))
+                    return;
+
+                const auto frame_state = g_editor_frames.find(live_window);
+                if (frame_state == g_editor_frames.end())
+                    return;
+
+                KUA_EditorContext live_context = context;
+                live_context.frame = live_window;
+                live_context.canvas = frame_state->second.canvas;
+                live_context.view = frame_state->second.view;
+                notify_window_created(live_context);
+            });
+#else
             notify_window_created(context);
+#endif
         }
         return window;
     }
@@ -1414,8 +1436,9 @@ private:
             if (!extension.api || !extension.api->on_editor_window_created)
                 continue;
 
-            // CreateKiWindow is a GUI-thread lifecycle callback. Invoke synchronously
-            // so the wxWindow pointer cannot go stale while a deferred callback waits.
+            // Extensions are invoked synchronously on the GUI thread. Production
+            // callers defer this until initial frame UI setup has completed and
+            // retain a weak wxWindow reference for the duration of the callback.
             extension.api->on_editor_window_created(&context);
         }
     }
