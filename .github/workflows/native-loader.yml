@@ -174,6 +174,8 @@ jobs:
           cmake --build build/smoke-extension --target kua_real_smoke_extension --parallel
           echo "Smoke extension compilation seconds: $(($(date +%s) - start))"
 
+      # The native smoke also covers detached/attached KUA menu cleanup on
+      # destruction of an editor-owned child frame.
       - name: Run real Eeschema and PCB Editor GAL smoke test
         env:
           KUA_SMOKE_LD_DEBUG: "1"
