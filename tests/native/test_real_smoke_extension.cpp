@@ -520,20 +520,22 @@ void on_window(const KUA_EditorContext* context)
     const uint64_t insert_panel = frame_window
         ? g_host->ui_window_create(frame_window, KUA_UI_WINDOW_PANEL, -1,
                                    "KUA AUI insert smoke", 0) : 0;
-    KUA_AuiPaneOptions insert_options = pane;
-    insert_options.name = "KUA_AuiInsertSmoke";
-    insert_options.caption = "KUA AUI insert smoke";
-    insert_options.direction = KUA_AUI_LEFT;
-    const int32_t insert_panel_added = manager && insert_panel
-        ? g_host->ui_aui_add_pane(manager, insert_panel, &insert_options) : -1;
-    const int32_t pane_inserted = insert_panel_added > 0
+    // InsertPane must support both adding a window not already managed and
+    // repositioning a pane already managed by this wxAuiManager.
+    const int32_t pane_inserted = manager && insert_panel
         ? g_host->ui_aui_insert_pane(manager, insert_panel, panel, KUA_AUI_INSERT_PANE) : -1;
     const int32_t insert_update = pane_inserted > 0 ? g_host->ui_aui_update(manager) : -1;
     KUA_AuiPaneState inserted_pane_state{};
     inserted_pane_state.struct_size = sizeof(inserted_pane_state);
-    const int32_t inserted_pane_state_read = insert_panel_added > 0
+    const int32_t inserted_pane_state_read = pane_inserted > 0
         ? g_host->ui_aui_get_pane_state(manager, insert_panel, &inserted_pane_state) : -1;
-    const int32_t insert_panel_detached = insert_panel_added > 0
+    const int32_t pane_repositioned = pane_inserted > 0
+        ? g_host->ui_aui_insert_pane(manager, insert_panel, panel, KUA_AUI_INSERT_ROW) : -1;
+    const int32_t reposition_update = pane_repositioned > 0
+        ? g_host->ui_aui_update(manager) : -1;
+    const int32_t invalid_insert_level = pane_repositioned > 0
+        ? g_host->ui_aui_insert_pane(manager, insert_panel, panel, 99u) : 0;
+    const int32_t insert_panel_detached = pane_inserted > 0
         ? g_host->ui_aui_detach_pane(manager, insert_panel) : -1;
     if (insert_panel_detached > 0)
         g_host->ui_aui_update(manager);
@@ -564,8 +566,11 @@ void on_window(const KUA_EditorContext* context)
         shown_pane_state.is_shown == 1 &&
         perspective_size > 0 && perspective_written == perspective_size &&
         perspective_loaded > 0 &&
-        insert_panel_added > 0 && pane_inserted > 0 && insert_update > 0 &&
+        pane_inserted > 0 && insert_update > 0 &&
         inserted_pane_state_read > 0 && inserted_pane_state.is_ok == 1 &&
+        inserted_pane_state.direction == KUA_AUI_RIGHT &&
+        pane_repositioned > 0 && reposition_update > 0 &&
+        invalid_insert_level == -1 &&
         insert_panel_detached > 0 && insert_panel_destroyed > 0 &&
         insert_panel_stale == -1;
 
