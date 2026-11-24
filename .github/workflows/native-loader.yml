@@ -2,7 +2,7 @@ name: Native loader prototype
 
 on:
   push:
-    branches: [main]
+    branches: [main, test/graceful-kiface-shutdown]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   native-loader:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     name: ${{ matrix.os }} KIFACE proxy harness
     timeout-minutes: 5
     strategy:
@@ -48,7 +49,11 @@ jobs:
   # Fetch the exact versioned .deb from KiCad's official pool: Launchpad can
   # prune a package from its apt index while the immutable versioned archive remains.
   real-kicad-linux:
-    if: github.event_name == 'workflow_dispatch' && inputs.full_editor_validation
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.full_editor_validation) ||
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/test/graceful-kiface-shutdown' &&
+       startsWith(github.event.head_commit.message, '[full-editor-validation]'))
     name: Exact-source KiCad nightly runtime and live-editor smoke
     runs-on: ubuntu-24.04
     container: ubuntu:26.04
