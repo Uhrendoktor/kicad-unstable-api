@@ -72,7 +72,7 @@ Each KUA call should map to an existing native method/event or a mechanical sequ
 | `ui_window_enable/raise/set_focus` | Direct native window enable, raise and focus calls | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
 | `ui_window_set/get_size/position` | Read/write native window geometry | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
 | AUI manager owner tracking | Invalidate manager handles with `wxAuiManager::GetManagedWindow()` | Implemented; live-editor smoke passed in both Eeschema and PCB Editor (run 45478187892). |
-| Notebook page lifecycle | Retrieve page handles, query selection, update labels, remove pages without destroying them and explicitly delete pages | Implemented; exact-head live-editor smoke pending. |
+| Notebook page lifecycle | Retrieve page handles, query selection, update labels, remove pages without destroying them and explicitly delete pages | Implemented; exact-head Eeschema/PCB Editor smoke passed with `notebook_ops=1` in both editors (run 45484673610). |
 
 
 
@@ -81,6 +81,10 @@ Each KUA call should map to an existing native method/event or a mechanical sequ
 The append-only menu-bar/menu-item binding slice was merged in [PR #8](https://github.com/Uhrendoktor/kicad-unstable-api/pull/8) at commit `73606aa16af0631f0f81114281e49186b6f5a1b3`. Exact-head fast validation [45478202553](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45478202553) passed on Ubuntu, Windows and macOS. Package-backed real-editor validation [45478187892](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45478187892) passed against KiCad nightly package `202611231147+b7066f8863~190~ubuntu26.04.1`, which matched pinned source SHA `b7066f886375b186ca8fa469de3a6382f6bba400`.
 
 Both Eeschema (`editor=1`) and PCB Editor (`editor=2`) emitted `native-ui-ready` with `menu_ops=1`, `menu_dispatch=1`, `unbind=1`, `window_ops=1`, `aui_owner_lifetime=1` and `property=1`. The diagnostic artifact is [14961087054](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45478187892/artifacts/14961087054). KiCad and GAL were not compiled in this validation: only the two KUA production proxies (~10.4 seconds) and smoke extension (~1.8 seconds) were compiled. The default three-platform PR matrix is capped at five minutes per platform and never builds KiCad.
+
+### PR #9 notebook page lifecycle evidence
+
+The append-only notebook page operations were merged in [PR #9](https://github.com/Uhrendoktor/kicad-unstable-api/pull/9) at commit `17d9c2a5fb087aa1580d580dc8a53ae106dbbfbb`. Exact-head Linux, Windows and macOS fast validation [run 45484687798](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45484687798) passed. Exact-source live validation [run 45484673610](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45484673610) passed using the archived official KiCad nightly package matching the pinned source revision. Both Eeschema (`editor=1`) and PCB Editor (`editor=2`) emitted `native-ui-ready` with `notebook_ops=1`, `menu_ops=1`, and `menu_dispatch=1`. The smoke proved page lookup/identity, selection, page-label round-trip, remove-without-destroy, reinsertion, delete and stale-handle invalidation. The diagnostics are in [artifact 14963222092](https://github.com/Uhrendoktor/kicad-unstable-api/actions/runs/45484673610/artifacts/14963222092). The full job took 194 seconds end-to-end including prerequisite installation; the KUA proxy compilation step took 15 seconds and the smoke-extension build step 3 seconds. No KiCad or GAL source build was run.
 
 ## 3. Native windows and controls
 
