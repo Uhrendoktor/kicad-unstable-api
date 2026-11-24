@@ -1545,6 +1545,151 @@ int32_t ui_aui_update(uint64_t manager_handle)
     return 1;
 }
 
+int32_t ui_aui_get_pane_state(uint64_t manager_handle, uint64_t window_handle,
+                              KUA_AuiPaneState* state)
+{
+    if (!on_gui_thread() || !state || state->struct_size < sizeof(KUA_AuiPaneState))
+        return -1;
+
+    UiHandleEntry* manager_entry = find_ui_handle(manager_handle, UiHandleKind::AuiManager);
+    UiHandleEntry* window_entry = find_ui_handle(window_handle, UiHandleKind::Window);
+    wxWindow* window = find_ui_window(window_handle);
+    auto* managed_window = manager_entry
+        ? static_cast<wxWindow*>(manager_entry->owner_window) : nullptr;
+    if (!manager_entry || !window_entry || !window || !managed_window ||
+        manager_entry->frame != window_entry->frame ||
+        !window_belongs_to_editor(window, managed_window))
+        return -1;
+
+    auto* manager = static_cast<wxAuiManager*>(manager_entry->pointer);
+    const wxAuiPaneInfo& pane = manager->GetPane(window);
+    if (!pane.IsOk())
+        return 0;
+
+    state->is_ok = pane.IsOk() ? 1 : 0;
+    state->is_shown = pane.IsShown() ? 1 : 0;
+    state->is_docked = pane.IsDocked() ? 1 : 0;
+    state->is_floating = pane.IsFloating() ? 1 : 0;
+    state->is_fixed = pane.IsFixed() ? 1 : 0;
+    state->is_movable = pane.IsMovable() ? 1 : 0;
+    state->is_resizable = pane.IsResizable() ? 1 : 0;
+    state->is_floatable = pane.IsFloatable() ? 1 : 0;
+    state->is_dockable = pane.IsDockable() ? 1 : 0;
+    if (pane.IsFloating())
+        state->direction = KUA_AUI_FLOATING;
+    else
+    {
+        switch (pane.dock_direction)
+        {
+        case wxAUI_DOCK_LEFT: state->direction = KUA_AUI_LEFT; break;
+        case wxAUI_DOCK_RIGHT: state->direction = KUA_AUI_RIGHT; break;
+        case wxAUI_DOCK_TOP: state->direction = KUA_AUI_TOP; break;
+        case wxAUI_DOCK_BOTTOM: state->direction = KUA_AUI_BOTTOM; break;
+        case wxAUI_DOCK_CENTER: state->direction = KUA_AUI_CENTER; break;
+        default: state->direction = -1; break;
+        }
+    }
+    state->layer = pane.dock_layer;
+    state->row = pane.dock_row;
+    state->position = pane.dock_pos;
+    return 1;
+}
+
+int32_t ui_aui_insert_pane(uint64_t manager_handle, uint64_t window_handle,
+                           uint64_t insert_location_window_handle, uint32_t insert_level)
+{
+    if (!on_gui_thread())
+        return -1;
+
+    UiHandleEntry* manager_entry = find_ui_handle(manager_handle, UiHandleKind::AuiManager);
+    UiHandleEntry* window_entry = find_ui_handle(window_handle, UiHandleKind::Window);
+    UiHandleEntry* location_entry =
+        find_ui_handle(insert_location_window_handle, UiHandleKind::Window);
+    wxWindow* window = find_ui_window(window_handle);
+    wxWindow* location = find_ui_window(insert_location_window_handle);
+    auto* managed_window = manager_entry
+        ? static_cast<wxWindow*>(manager_entry->owner_window) : nullptr;
+    if (!manager_entry || !window_entry || !location_entry || !window || !location ||
+        !managed_window || manager_entry->frame != window_entry->frame ||
+        manager_entry->frame != location_entry->frame ||
+        window == location ||
+        !window_belongs_to_editor(window, managed_window) ||
+        !window_belongs_to_editor(location, managed_window))
+        return -1;
+
+    int native_insert_level = wxAUI_INSERT_PANE;
+    switch (insert_level)
+    {
+    case KUA_AUI_INSERT_PANE: native_insert_level = wxAUI_INSERT_PANE; break;
+    case KUA_AUI_INSERT_ROW: native_insert_level = wxAUI_INSERT_ROW; break;
+    case KUA_AUI_INSERT_DOCK: native_insert_level = wxAUI_INSERT_DOCK; break;
+    default: return -1;
+    }
+
+    auto* manager = static_cast<wxAuiManager*>(manager_entry->pointer);
+    const wxAuiPaneInfo& insert_location = manager->GetPane(location);
+    if (!insert_location.IsOk())
+        return -1;
+    return manager->InsertPane(window, insert_location, native_insert_level) ? 1 : 0;
+}
+
+int32_t ui_aui_pane_show(uint64_t manager_handle, uint64_t window_handle, int32_t shown)
+{
+    if (!on_gui_thread())
+        return -1;
+
+    UiHandleEntry* manager_entry = find_ui_handle(manager_handle, UiHandleKind::AuiManager);
+    UiHandleEntry* window_entry = find_ui_handle(window_handle, UiHandleKind::Window);
+    wxWindow* window = find_ui_window(window_handle);
+    auto* managed_window = manager_entry
+        ? static_cast<wxWindow*>(manager_entry->owner_window) : nullptr;
+    if (!manager_entry || !window_entry || !window || !managed_window ||
+        manager_entry->frame != window_entry->frame ||
+        !window_belongs_to_editor(window, managed_window))
+        return -1;
+
+    wxAuiPaneInfo& pane = static_cast<wxAuiManager*>(manager_entry->pointer)->GetPane(window);
+    if (!pane.IsOk())
+        return -1;
+    pane.Show(shown != 0);
+    return 1;
+}
+
+int32_t ui_aui_save_perspective(uint64_t manager_handle, char* buffer, uint32_t capacity)
+{
+    if (!on_gui_thread() || (!buffer && capacity != 0))
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(manager_handle, UiHandleKind::AuiManager);
+    if (!entry)
+        return -1;
+
+    const wxString perspective = static_cast<wxAuiManager*>(entry->pointer)->SavePerspective();
+    const wxScopedCharBuffer utf8 = perspective.utf8_str();
+    const char* source = utf8.data();
+    const size_t length = source ? std::strlen(source) : 0;
+    if (length > static_cast<size_t>(std::numeric_limits<int32_t>::max()))
+        return -1;
+    if (buffer && capacity > 0)
+    {
+        const size_t copied = std::min(length, static_cast<size_t>(capacity - 1));
+        if (copied)
+            std::memcpy(buffer, source, copied);
+        buffer[copied] = '\\0';
+    }
+    return static_cast<int32_t>(length);
+}
+
+int32_t ui_aui_load_perspective(uint64_t manager_handle, const char* perspective, int32_t update)
+{
+    if (!on_gui_thread() || !perspective)
+        return -1;
+    UiHandleEntry* entry = find_ui_handle(manager_handle, UiHandleKind::AuiManager);
+    if (!entry)
+        return -1;
+    return static_cast<wxAuiManager*>(entry->pointer)->LoadPerspective(
+        wxString::FromUTF8(perspective), update != 0) ? 1 : 0;
+}
+
 uint64_t ui_properties_get_panel(uint64_t frame_handle)
 {
     if (!on_gui_thread())
@@ -1864,6 +2009,11 @@ uint64_t ui_aui_get_manager(uint64_t) { return 0; }
 int32_t ui_aui_add_pane(uint64_t, uint64_t, const KUA_AuiPaneOptions*) { return -1; }
 int32_t ui_aui_detach_pane(uint64_t, uint64_t) { return -1; }
 int32_t ui_aui_update(uint64_t) { return -1; }
+int32_t ui_aui_get_pane_state(uint64_t, uint64_t, KUA_AuiPaneState*) { return -1; }
+int32_t ui_aui_insert_pane(uint64_t, uint64_t, uint64_t, uint32_t) { return -1; }
+int32_t ui_aui_pane_show(uint64_t, uint64_t, int32_t) { return -1; }
+int32_t ui_aui_save_perspective(uint64_t, char*, uint32_t) { return -1; }
+int32_t ui_aui_load_perspective(uint64_t, const char*, int32_t) { return -1; }
 uint64_t ui_properties_get_panel(uint64_t) { return 0; }
 uint64_t ui_properties_get_grid(uint64_t) { return 0; }
 int32_t ui_property_grid_append_string(uint64_t, const char*, const char*, const char*) { return -1; }
@@ -2065,6 +2215,11 @@ KUA_HostApi make_host_api()
     host.ui_aui_add_pane = &ui_aui_add_pane;
     host.ui_aui_detach_pane = &ui_aui_detach_pane;
     host.ui_aui_update = &ui_aui_update;
+    host.ui_aui_get_pane_state = &ui_aui_get_pane_state;
+    host.ui_aui_insert_pane = &ui_aui_insert_pane;
+    host.ui_aui_pane_show = &ui_aui_pane_show;
+    host.ui_aui_save_perspective = &ui_aui_save_perspective;
+    host.ui_aui_load_perspective = &ui_aui_load_perspective;
     host.ui_properties_get_panel = &ui_properties_get_panel;
     host.ui_properties_get_grid = &ui_properties_get_grid;
     host.ui_property_grid_append_string = &ui_property_grid_append_string;
