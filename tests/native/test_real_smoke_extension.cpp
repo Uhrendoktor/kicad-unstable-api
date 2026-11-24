@@ -929,33 +929,48 @@ void on_window(const KUA_EditorContext* context)
                     top_level_windows.emplace_back(window);
             }
 
-            int32_t close_requested = 0;
-            int32_t close_failed = 0;
+            int32_t destroy_requested = 0;
+            int32_t destroy_failed = 0;
+            int32_t window_index = 0;
             for (auto& weak_window : top_level_windows)
             {
                 wxWindow* window = weak_window.get();
                 if (!window || window->IsBeingDeleted())
+                {
+                    ++window_index;
                     continue;
+                }
 
-                if (window->Close(true))
-                    ++close_requested;
+                char details[96]{};
+                std::snprintf(details, sizeof(details), "index=%d|class=%s",
+                              window_index,
+                              window->GetClassInfo() ? window->GetClassInfo()->GetClassName() : "unknown");
+                record("graceful-window-destroy-begin", editor_kind, details);
+
+                if (window->Destroy())
+                {
+                    ++destroy_requested;
+                    record("graceful-window-destroy-requested", editor_kind, details);
+                }
                 else
-                    ++close_failed;
-
-                // Process Close events and deferred wxPendingDelete objects so
-                // each subsequent weak reference is revalidated before use.
-                wxYieldIfNeeded();
+                {
+                    ++destroy_failed;
+                    record("graceful-window-destroy-failed", editor_kind, details);
+                }
+                ++window_index;
             }
 
-            char close_details[96]{};
-            std::snprintf(close_details, sizeof(close_details),
-                          "top_level=%zu|close_requested=%d|close_failed=%d",
-                          top_level_windows.size(), close_requested, close_failed);
-            record(close_requested > 0 && close_failed == 0
-                       ? "graceful-frame-close-requested"
-                       : "graceful-frame-close-failed",
-                   editor_kind, close_details);
+            char destroy_details[96]{};
+            std::snprintf(destroy_details, sizeof(destroy_details),
+                          "top_level=%zu|destroy_requested=%d|destroy_failed=%d",
+                          top_level_windows.size(), destroy_requested, destroy_failed);
+            record(destroy_requested > 0 && destroy_failed == 0
+                       ? "graceful-windows-destroy-requested"
+                       : "graceful-windows-destroy-failed",
+                   editor_kind, destroy_details);
 
+            // OnExit drains wxPendingDelete, then KiCad calls OnPgmExit(),
+            // KIWAY::OnKiwayEnd(), and each proxy KIFACE's OnKifaceEnd().
             if (wxTheApp)
                 wxTheApp->ExitMainLoop();
         });
