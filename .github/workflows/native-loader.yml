@@ -2,7 +2,7 @@ name: Native loader prototype
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/native-menu-operations]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   native-loader:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     name: ${{ matrix.os }} KIFACE proxy harness
     strategy:
       fail-fast: false
@@ -41,10 +42,15 @@ jobs:
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
   # This cold, full-source editor build costs roughly 80-110 Linux runner
-  # minutes. Keep exact-build runtime validation available, but never run it
-  # automatically on every PR or push.
+  # minutes. Keep it opt-in: workflow_dispatch, or one explicitly marked push
+  # to the PR #8 feature branch when a native workflow_dispatch tool is absent.
+  # Ordinary PR/push validation remains the fast three-platform harness only.
   real-kicad-linux:
-    if: github.event_name == 'workflow_dispatch' && inputs.full_editor_validation
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.full_editor_validation) ||
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/feature/native-menu-operations' &&
+       startsWith(github.event.head_commit.message, '[full-editor-validation]'))
     name: Pinned KiCad production build and live-editor smoke (manual opt-in)
     runs-on: ubuntu-24.04
     container: debian:trixie
