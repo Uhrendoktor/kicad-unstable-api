@@ -183,6 +183,7 @@ jobs:
       # Run deferred top-level window destruction and verify KIFACE cleanup.
       # One-shot validation of the ordered wxEVT_CLOSE_WINDOW shutdown path.
       # One-shot check that KiCad native close handlers reach KIFACE shutdown.
+      # One-shot exact-source validation of ordered native close handlers and KIFACE shutdown.
       - name: Run real Eeschema and PCB Editor GAL smoke with graceful KIFACE shutdown
         env:
           KUA_SMOKE_LD_DEBUG: "1"
